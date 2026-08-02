@@ -103,8 +103,9 @@ function M.render(buf, layout, graph, view)
   local hl = view.highlights
 
   for id, b in pairs(layout.boxes) do
-    local group = (id == view.selected_id) and hl.focus or hl.box
     for rr = b.row, b.row + b.height - 1 do
+      -- Selected box: color only the text row (b.row + 1); borders stay dim.
+      local group = (id == view.selected_id and rr == b.row + 1) and hl.focus or hl.box
       vim.api.nvim_buf_set_extmark(buf, M.ns, rr - 1, b.col - 1, {
         end_col = b.col - 1 + b.width,
         hl_group = group,
@@ -134,6 +135,14 @@ function M.render(buf, layout, graph, view)
       vim.api.nvim_buf_set_extmark(buf, M.ns, r1 - 1, c1 - 1, {
         end_row = r2,
         end_col = c2,
+        hl_group = hl.edge,
+        priority = 1,
+      })
+    end
+    -- Arrowheads must be highlighted too, or they render as default white.
+    if e.arrow then
+      vim.api.nvim_buf_set_extmark(buf, M.ns, e.arrow.row - 1, e.arrow.col - 1, {
+        end_col = e.arrow.col,
         hl_group = hl.edge,
         priority = 1,
       })

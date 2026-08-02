@@ -1,10 +1,10 @@
 -- Real-LSP integration probe (needs clangd on PATH).
 --
--- This is deliberately tolerant: clangd's call hierarchy is index-based and
--- flaky on older builds. On this machine clangd 17 advertises the capability
--- but returns empty incoming/outgoing results (and even references) for the
--- sample file. The test therefore reports what the server actually provides
--- and only hard-fails on protocol/plugin errors, not on empty server data.
+-- Uses tests/clean.c (well-formed, unlike test.c). Verifies on the real
+-- server:
+--   * callout from `twice` — clangd < 20 has no outgoingCalls, so this must
+--     go through the body-scan heuristic and still find `add`.
+--   * callin from `add` — standard incomingCalls finds `main` and `twice`.
 --
 -- Run from the repo root:
 --   nvim --headless -u NONE -l tests/integration.lua
@@ -23,7 +23,7 @@ local render_mod = require('callgraph.render')
 
 config_mod.set({ show_call_site = true })
 
-vim.cmd('edit ' .. root .. '/tests/test.c')
+vim.cmd('edit ' .. root .. '/tests/clean.c')
 vim.lsp.start({
   name = 'clangd',
   cmd = { 'clangd' },
@@ -35,6 +35,7 @@ if not attached then
   print('FAIL: clangd did not attach')
   os.exit(1)
 end
+vim.wait(3000, function() return false end) -- let clangd parse
 
 local failed = 0
 local function check(name, cond, detail)
@@ -53,44 +54,51 @@ local function render_graph(graph, root, direction)
   return vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 end
 
+local function names_of(graph)
+  local names = {}
+  for _, n in pairs(graph.nodes) do names[#names + 1] = n.name end
+  table.sort(names)
+  return names
+end
+
+local function check_build(name, root, direction, client, encoding, min_nodes, expect_names)
+  local d = graph_mod.build(root, direction, { max_depth = 4 }, lsp_mod.make_fetch(client, encoding, config_mod.get()))
+  d:next(function(g)
+    local names = names_of(g)
+    print(name .. ' nodes: ' .. table.concat(names, ', '))
+    check(name .. ' graph built', vim.tbl_count(g.nodes) >= min_nodes)
+    if expect_names then
+      local found = {}
+      for _, n in pairs(g.nodes) do found[n.name] = true end
+      for _, en in ipairs(expect_names) do
+        check(name .. ' contains ' .. en, found[en] == true)
+      end
+    end
+    local lines = render_graph(g, root, direction)
+    print('--- rendered ' .. name .. ' ---')
+    for _, l in ipairs(lines) do print(l) end
+  end, function(e)
+    print('FAIL: ' .. name .. ' build error: ' .. tostring(e))
+    failed = failed + 1
+  end)
+end
+
 util.async_start(function()
   local ok, err = pcall(function()
-    -- Cursor on func_l2_c's name (line 21, the 12th column is the name start).
-    vim.api.nvim_win_set_cursor(0, { 21, 14 })
+    -- ---- Part 1: callout from `twice` via the body-scan fallback
+    vim.api.nvim_win_set_cursor(0, { 7, 13 }) -- on `twice` name (line 6, 0-based)
     local root, encoding, client = lsp_mod.resolve_root(vim.api.nvim_get_current_buf())
-    check('resolve root func_l2_c', root ~= nil and root.name == 'func_l2_c')
-    if not root then return end
+    check('resolve root twice', root ~= nil and root.name == 'twice')
+    if root then
+      check_build('callout(twice)', root, 'callout', client, encoding, 2, { 'add' })
+    end
 
-    -- callin (incomingCalls)
-    local d = graph_mod.build(root, 'callin', { max_depth = 4 }, lsp_mod.make_fetch(client, encoding))
-    d:next(function(g)
-      local count = vim.tbl_count(g.nodes)
-      print('callin: server returned ' .. count .. ' node(s)')
-      if count > 1 then
-        local names = {}
-        for _, n in pairs(g.nodes) do names[#names + 1] = n.name end
-        table.sort(names)
-        print('  nodes: ' .. table.concat(names, ', '))
-        local lines = render_graph(g, root, 'callin')
-        print('--- rendered callin ---')
-        for _, l in ipairs(lines) do print(l) end
-      else
-        print('NOTE: incomingCalls returned no callers — clangd 17 index limitation; try clangd >= 20.')
-      end
-    end, function(e)
-      print('callin failed: ' .. tostring(e))
-    end)
-
-    -- callout (outgoingCalls) — clangd < 20 rejects with MethodNotFound.
-    vim.api.nvim_win_set_cursor(0, { 27, 4 })
+    -- ---- Part 2: callin from `add` (standard incomingCalls)
+    vim.api.nvim_win_set_cursor(0, { 3, 13 }) -- on `add` name (line 2)
     local root2, enc2, client2 = lsp_mod.resolve_root(vim.api.nvim_get_current_buf())
+    check('resolve root add', root2 ~= nil and root2.name == 'add')
     if root2 then
-      local d2 = graph_mod.build(root2, 'callout', { max_depth = 4 }, lsp_mod.make_fetch(client2, enc2))
-      d2:next(function(g2)
-        print('callout: server returned ' .. vim.tbl_count(g2.nodes) .. ' node(s)')
-      end, function(e)
-        print('callout failed (expected on clangd < 20): ' .. tostring(e))
-      end)
+      check_build('callin(add)', root2, 'callin', client2, enc2, 2, { 'main' })
     end
   end)
   if not ok then
@@ -102,7 +110,7 @@ end)
 vim.wait(30000, function() return false end)
 print('---')
 if failed == 0 then
-  print('INTEGRATION OK (server data may be empty on clangd 17)')
+  print('INTEGRATION OK')
 else
   print('INTEGRATION FAILED: ' .. failed .. ' failure(s)')
 end

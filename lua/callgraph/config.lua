@@ -8,10 +8,14 @@ M.defaults = {
   max_depth = 4,
   -- Show the call-site location (file:line) inside each box.
   show_call_site = true,
+  -- When a server lacks call-hierarchy support (clangd < 20 for outgoingCalls),
+  -- fall back to heuristics: scan the function body and resolve each call token
+  -- (callout), or use references + documentSymbol (callin). Set false to use
+  -- only the standard call hierarchy and error when the server can't provide it.
+  fallback = true,
   window = {
+    -- Right-split maximum width (fraction of the editor).
     max_width_ratio = 0.8,
-    max_height_ratio = 0.8,
-    border = 'rounded',
     -- Vertical gap between stacked boxes within a column.
     row_gap = 2,
     -- Horizontal gap between columns.
@@ -66,9 +70,9 @@ function M.define_highlights()
   local h = M.get().highlights
   vim.api.nvim_set_hl(0, h.canvas, { default = true, link = 'NormalFloat' })
   vim.api.nvim_set_hl(0, h.box, { default = true, fg = '#5d6478' })
-  vim.api.nvim_set_hl(0, h.focus, { default = true, fg = '#e0af68', bg = '#2b2f3c', bold = true })
+  vim.api.nvim_set_hl(0, h.focus, { default = true, fg = '#98c379', bold = true })
   vim.api.nvim_set_hl(0, h.cycle, { default = true, fg = '#f7768e', bold = true })
-  vim.api.nvim_set_hl(0, h.edge, { default = true, fg = '#3f4659' })
+  vim.api.nvim_set_hl(0, h.edge, { default = true, fg = '#5d6478' })
   vim.api.nvim_set_hl(0, h.collapsed, { default = true, fg = '#7aa2f7' })
 end
 

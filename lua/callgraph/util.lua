@@ -141,6 +141,31 @@ function M.pos_to_byte(line, pos_char, encoding)
   return i - 1
 end
 
+--- Resolve when all Deferreds resolve. Results are collected positionally;
+--- a rejected Deferred contributes `nil` (never rejects the aggregate).
+function M.all(deferreds)
+  local d = M.Deferred.new()
+  local n = #deferreds
+  if n == 0 then d:resolve({}); return d end
+  local results = {}
+  local pending = n
+  for i, dd in ipairs(deferreds) do
+    dd:next(
+      function(value)
+        results[i] = value
+        pending = pending - 1
+        if pending == 0 then d:resolve(results) end
+      end,
+      function()
+        results[i] = nil
+        pending = pending - 1
+        if pending == 0 then d:resolve(results) end
+      end
+    )
+  end
+  return d
+end
+
 -- ---------------------------------------------------------------------------
 -- Character-count helpers (box widths are character-based, not display-based).
 -- ---------------------------------------------------------------------------

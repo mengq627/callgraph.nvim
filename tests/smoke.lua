@@ -156,6 +156,89 @@ check('expand reveals l2_a', g4 and g4.nodes[nid(l2a)].visible == true)
 local g5 = graph_mod.expand(g4, g4.nodes[nid(l1a)], make_fetch(callees)).value
 check('collapse hides l2_a', g5 and g5.nodes[nid(l2a)].visible == false)
 
+-- ---- Test 7: C call-site scanner (pure)
+local scanner = require('callgraph.scanner')
+local scan_src = table.concat({
+  'static int twice(int x) {',
+  '    int s = add(x, x);          // real call',
+  '    // comment call foo();',
+  '    /* block bar(1); */',
+  '    if (x > 0) { s = add(s, 1); }',
+  '    const char *p = "str(fake)";',
+  "    char q = 'a';",
+  '    return s;',
+  '}',
+}, '\n')
+local scan_hits = scanner.scan_calls(scan_src)
+local scan_ok = #scan_hits == 2 and scan_hits[1][1] == 1 and scan_hits[1][2] == 12 and scan_hits[2][1] == 4 and scan_hits[2][2] == 21
+check('scanner finds real calls only', scan_ok, vim.inspect(scan_hits))
+
+-- ---- Test 8: fallback callout (body-scan) orchestration with a fake client
+local fallback = require('callgraph.fallback')
+local fb_lines = vim.split(scan_src, '\n', { plain = true })
+local fb_buf = vim.api.nvim_create_buf(false, true)
+vim.api.nvim_buf_set_name(fb_buf, '/tmp/fb_src.c')
+vim.api.nvim_buf_set_lines(fb_buf, 0, -1, false, fb_lines)
+local add_item2 = item('add', 2)
+local fake_client = {
+  request = function(method, params, cb, bufnr)
+    if method == 'textDocument/prepareCallHierarchy' then
+      cb(nil, add_item2) -- any call token resolves to `add`
+    else
+      cb({ message = 'unexpected method ' .. method }, nil)
+    end
+  end,
+}
+local twice_node = {
+  name = 'twice', kind = 12, uri = vim.uri_from_bufnr(fb_buf),
+  range = { start = { line = 0, character = 0 }, ['end'] = { line = #fb_lines - 1, character = 0 } },
+  selectionRange = { start = { line = 0, character = 0 }, ['end'] = { line = 0, character = 5 } },
+}
+local fb_fetch = fallback.make_fetch(fake_client, 'utf-16', function() return nil end)
+local fb_result = fb_fetch(twice_node, 'callout').value
+check('fallback callout returns both call tokens', fb_result ~= nil and #fb_result == 2)
+check('fallback callout resolves to add', fb_result and fb_result[1].item.name == 'add')
+check('fallback callout call_site recorded', fb_result and fb_result[1].call_site and fb_result[1].call_site.line == 1)
+
+-- ---- Test 9: combined fetch prefers standard over fallback
+local lsp_mod = require('callgraph.lsp')
+-- standard client: incomingCalls returns 2 callers, references returns nothing
+local std_client = {
+  request = function(method, params, cb, bufnr)
+    if method == 'callHierarchy/incomingCalls' then
+      cb(nil, { { from = item('main', 27), fromRanges = { { start = { line = 28, character = 0 }, ['end'] = { line = 28, character = 1 } } } } })
+    else
+      cb({ message = 'method not found' }, nil)
+    end
+  end,
+}
+local combined = lsp_mod.make_fetch(std_client, 'utf-16', { fallback = true })
+local c_node = { name = 'func', kind = 12, uri = 'file:///x.c', range = { start = { line = 0, character = 0 }, ['end'] = { line = 1, character = 0 } }, selectionRange = { start = { line = 0, character = 0 }, ['end'] = { line = 0, character = 4 } } }
+local c_res = combined(c_node, 'callin').value
+check('standard result used when non-empty', c_res ~= nil and #c_res == 1 and c_res[1].item.name == 'main')
+
+-- ---- Test 10: same-column edge (diamond at equal depth) draws a vertical arrow
+-- main2 -> A, main2 -> B, A -> B: A and B both at depth 1, so A->B is same-column.
+local A2 = item('func_a', 0)
+local B2 = item('func_b', 10)
+local main2 = item('main2', 20)
+local sc_callees = {
+  main2 = { { A2, 1 }, { B2, 2 } },
+  func_a = { { B2, 3 } },
+  func_b = {},
+}
+local gsc = graph_mod.build(main2, 'callout', { max_depth = 4 }, make_fetch(sc_callees)).value
+local laysc = layout_mod.layout(gsc, opts, { direction = 'callout', selected_id = nid(main2) })
+render_mod.render(buf, laysc, gsc, { selected_id = nid(main2), highlights = config.get().highlights })
+local txt3 = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n')
+check('same-column edge drawn with vertical arrow', txt3:find('[v^]') ~= nil)
+check('same-column edge connects A->B', (function()
+  for _, e in ipairs(laysc.edges) do
+    if e.arrow and e.arrow.ch and (e.arrow.ch == 'v' or e.arrow.ch == '^') then return true end
+  end
+  return false
+end)())
+
 print('---')
 if failed == 0 then
   print('SMOKE OK')

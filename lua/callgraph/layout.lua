@@ -68,51 +68,31 @@ local function add_forward_edge(edges, sb, tb)
   edges[#edges + 1] = { segments = segments, arrow = { row = R2, col = tgt_left - 1 } }
 end
 
-local function add_same_column_edge(edges, sb, tb, boxes, gutter_row)
-  local above, below = sb, tb
-  if above.row > below.row then above, below = below, above end
+--- Same-column edge: straight vertical between the caller box and the callee
+--- box (same column). The arrow always points INTO the callee; its glyph is
+--- derived from the relative rows so either stacking order renders correctly.
+--- If a box sits between them the line passes behind it (edges are drawn
+--- before boxes), acceptable for the rare same-column case.
+local function add_same_column_edge(edges, caller_box, callee_box)
   local segments = {}
-
-  -- Directly stacked (no box between): a straight vertical.
-  local adjacent = true
-  for _, b in pairs(boxes) do
-    if b.id ~= above.id and b.id ~= below.id and b.col == above.col and b.row > above.row + above.height and b.row < below.row then
-      adjacent = false
-      break
+  local ex = caller_box.col + math.floor(caller_box.width / 2)
+  if callee_box.row > caller_box.row then
+    -- callee below: line from caller bottom down, arrow v into callee top
+    local line_top = caller_box.row + caller_box.height
+    local line_bottom = callee_box.row - 2
+    if line_bottom >= line_top then
+      segments[#segments + 1] = { r1 = line_top, c1 = ex, r2 = line_bottom, c2 = ex, ch = '│' }
     end
-  end
-  if adjacent and below.row > above.row + above.height then
-    local ex = above.col + math.floor(above.width / 2)
-    if below.row - 1 >= above.row + above.height + 1 then
-      segments[#segments + 1] = { r1 = above.row + above.height + 1, c1 = ex, r2 = below.row - 1, c2 = ex, ch = '│' }
+    edges[#edges + 1] = { segments = segments, arrow = { row = callee_box.row - 1, col = ex, ch = 'v' } }
+  else
+    -- callee above: line from caller top up, arrow ^ into callee bottom
+    local line_top = caller_box.row - 1
+    local line_bottom = callee_box.row + callee_box.height + 1
+    if line_top >= line_bottom then
+      segments[#segments + 1] = { r1 = line_bottom, c1 = ex, r2 = line_top, c2 = ex, ch = '│' }
     end
-    edges[#edges + 1] = { segments = segments, arrow = { row = below.row - 1, col = ex, ch = 'v' } }
-    return
+    edges[#edges + 1] = { segments = segments, arrow = { row = callee_box.row + callee_box.height, col = ex, ch = '^' } }
   end
-
-  -- Otherwise detour through the bottom gutter: down from the upper box,
-  -- along the gutter, up into the lower box's left gap.
-  local ex = above.col + math.floor(above.width / 2)
-  local cc = below.col
-  local cgc = cc - 2
-  if cgc < 1 then cgc = 1 end
-
-  if gutter_row - 1 >= above.row + above.height + 1 then
-    segments[#segments + 1] = { r1 = above.row + above.height + 1, c1 = ex, r2 = gutter_row - 1, c2 = ex, ch = '│' }
-  end
-  segments[#segments + 1] = { r1 = gutter_row, c1 = ex, r2 = gutter_row, c2 = ex, ch = '┘' } -- up + left
-  if ex - 1 >= cgc + 1 then
-    segments[#segments + 1] = { r1 = gutter_row, c1 = cgc + 1, r2 = gutter_row, c2 = ex - 1, ch = '─' }
-  end
-  segments[#segments + 1] = { r1 = gutter_row, c1 = cgc, r2 = gutter_row, c2 = cgc, ch = '└' } -- right + up
-  local tr = below.row + 1
-  if gutter_row - 1 >= tr + 1 then
-    segments[#segments + 1] = { r1 = tr + 1, c1 = cgc, r2 = gutter_row - 1, c2 = cgc, ch = '│' }
-  end
-  if gutter_row > tr then
-    segments[#segments + 1] = { r1 = tr, c1 = cgc, r2 = tr, c2 = cgc, ch = '┌' } -- down + right
-  end
-  edges[#edges + 1] = { segments = segments, arrow = { row = tr, col = cc - 1 } }
 end
 
 --- Compute the full layout for a graph.
@@ -222,7 +202,16 @@ function M.layout(graph, opts, view_state)
           if sb.col < tb.col then
             add_forward_edge(edges, sb, tb)
           else
-            add_same_column_edge(edges, sb, tb, boxes, gutter_row)
+            -- same column: sb is the parent box, tb the child box. The callee
+            -- is the child for callout, the parent for callin (its children
+            -- are callers).
+            local caller_box, callee_box
+            if graph.direction == 'callout' then
+              caller_box, callee_box = sb, tb
+            else
+              caller_box, callee_box = tb, sb
+            end
+            add_same_column_edge(edges, caller_box, callee_box)
           end
         end
       end

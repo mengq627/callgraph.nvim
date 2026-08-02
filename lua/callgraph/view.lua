@@ -77,15 +77,9 @@ function M.open_with_root(root, direction, encoding, client)
 end
 
 function M.open_float()
-  local opts = config.get()
+  -- Right-side split window (not a float).
   local win = vim.api.nvim_open_win(state.buf, true, {
-    relative = 'editor',
-    row = 1,
-    col = 1,
-    width = 10,
-    height = 3,
-    style = 'minimal',
-    border = opts.window.border,
+    split = 'right',
   })
   state.win = win
   local wo = vim.wo[win]
@@ -93,7 +87,6 @@ function M.open_float()
   wo.number = false
   wo.relativenumber = false
   wo.signcolumn = 'no'
-  wo.winhl = 'Normal:' .. opts.highlights.canvas
   M.setup_keymaps()
 end
 
@@ -102,7 +95,7 @@ end
 -- ---------------------------------------------------------------------------
 
 function M.rebuild()
-  local fetch = lsp_mod.make_fetch(state.client, state.encoding)
+  local fetch = lsp_mod.make_fetch(state.client, state.encoding, config.get())
   local d = graph_mod.build(state.root, state.direction, { max_depth = state.view_depth }, fetch)
   d:next(function(graph)
     state.graph = graph
@@ -129,26 +122,14 @@ function M.render_view()
 end
 
 function M.resize_window(opts, layout)
-  local lines = vim.o.lines
+  -- Split window keeps the full editor height; only the width tracks content.
   local columns = vim.o.columns
-  local mh = math.floor(lines * opts.window.max_height_ratio)
   local mw = math.floor(columns * opts.window.max_width_ratio)
-  local h = math.min(layout.height + 2, mh)
   local w = math.min(layout.width + 2, mw)
-  if h < 3 then h = 3 end
   if w < 3 then w = 3 end
-  if state.last_h == h and state.last_w == w then return end
-  state.last_h = h
+  if state.last_w == w then return end
   state.last_w = w
-  local row = math.max(0, math.floor((lines - h) / 2))
-  local col = math.max(0, math.floor((columns - w) / 2))
-  vim.api.nvim_win_set_config(state.win, {
-    relative = 'editor',
-    row = row,
-    col = col,
-    width = w,
-    height = h,
-  })
+  vim.api.nvim_win_set_width(state.win, w)
 end
 
 function M.focus_selected()
@@ -157,7 +138,7 @@ function M.focus_selected()
   if not box then return end
   pcall(function()
     vim.api.nvim_win_set_cursor(state.win, { box.row, box.col - 1 })
-    vim.api.nvim_win_call(state.win, function() vim.cmd('normal! zz') end)
+    vim.api.nvim_win_call(state.win, function() vim.cmd('normal! zt') end)
   end)
 end
 
@@ -209,7 +190,7 @@ function M.toggle_expand()
   if not state or not state.graph then return end
   local node = state.graph.nodes[state.selected_id]
   if not node then return end
-  local fetch = lsp_mod.make_fetch(state.client, state.encoding)
+  local fetch = lsp_mod.make_fetch(state.client, state.encoding, config.get())
   local d = graph_mod.expand(state.graph, node, fetch)
   d:next(function(g)
     state.graph = g

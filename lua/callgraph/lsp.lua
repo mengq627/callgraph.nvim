@@ -7,8 +7,16 @@
 
 local util = require('callgraph.util')
 local graph_mod = require('callgraph.graph')
+local fallback_mod = require('callgraph.fallback')
 
 local M = {}
+
+local function notify_once(key, msg)
+  if not vim.g['callgraph_notified_' .. key] then
+    vim.g['callgraph_notified_' .. key] = true
+    vim.notify(msg, vim.log.levels.INFO, { title = 'Callgraph' })
+  end
+end
 
 -- bufnr -> { tick = changedtick, tree = DocumentSymbol[] }
 local symbol_cache = {}
@@ -44,23 +52,28 @@ local function contains(range, line, char)
   return true
 end
 
---- Innermost enclosing function-like symbol under `cursor` (1-based row).
+--- documentSymbol tree for `bufnr`, cached and refreshed on change.
 --- Must be called from a coroutine (uses util.await).
-local function enclosing_function_at(bufnr, cursor, encoding)
+function M.get_symbol_tree(bufnr, encoding)
   local cache = symbol_cache[bufnr]
   local tick = vim.b[bufnr].changedtick or 0
-  if not cache or cache.tick ~= tick then
-    local client = find_client(bufnr, 'textDocument/documentSymbol')
-    if not client then return nil end
-    local d = util.Deferred.new()
-    client.request('textDocument/documentSymbol', { textDocument = { uri = vim.uri_from_bufnr(bufnr) } }, function(err, result)
-      if err or not result then d:resolve(nil) else d:resolve(result) end
-    end, bufnr)
-    local tree = util.await(d)
-    if not tree then return nil end
-    symbol_cache[bufnr] = { tick = tick, tree = tree }
-    cache = symbol_cache[bufnr]
-  end
+  if cache and cache.tick == tick then return cache.tree end
+  local client = find_client(bufnr, 'textDocument/documentSymbol')
+  if not client then return nil end
+  local d = util.Deferred.new()
+  client.request('textDocument/documentSymbol', { textDocument = { uri = vim.uri_from_bufnr(bufnr) } }, function(err, result)
+    if err or not result then d:resolve(nil) else d:resolve(result) end
+  end, bufnr)
+  local tree = util.await(d)
+  if tree then symbol_cache[bufnr] = { tick = tick, tree = tree } end
+  return tree
+end
+
+--- Innermost enclosing function-like symbol under `cursor` (1-based row).
+--- Must be called from a coroutine (uses util.await).
+function M.enclosing_function_at(bufnr, cursor, encoding)
+  local tree = M.get_symbol_tree(bufnr, encoding)
+  if not tree then return nil end
 
   local line = cursor[1] - 1
   local line_text = vim.api.nvim_buf_get_lines(bufnr, line, line + 1, false)[1] or ''
@@ -77,8 +90,29 @@ local function enclosing_function_at(bufnr, cursor, encoding)
       end
     end
   end
-  walk(cache.tree)
+  walk(tree)
   return found
+end
+
+--- First function-like symbol named `name` in `bufnr`, preferring shallower
+--- nesting (top-level first). Used when the server cannot resolve a call token.
+--- Must be called from a coroutine (uses util.await).
+function M.find_functions_by_name(bufnr, name, encoding)
+  local tree = M.get_symbol_tree(bufnr, encoding)
+  if not tree then return nil end
+  local out = {}
+  local function walk(symbols, depth)
+    for _, s in ipairs(symbols or {}) do
+      if s.name == name and graph_mod.is_function_kind(s.kind) then
+        out[#out + 1] = { symbol = s, depth = depth }
+      end
+      walk(s.children, depth + 1)
+    end
+  end
+  walk(tree, 0)
+  if #out == 0 then return nil end
+  table.sort(out, function(a, b) return a.depth < b.depth end)
+  return out[1].symbol
 end
 
 --- Resolve the "current function" for `bufnr`. Returns root item, offset
@@ -114,7 +148,7 @@ function M.resolve_root(bufnr)
   end
 
   -- Fallback: enclosing function.
-  local node = enclosing_function_at(bufnr, vim.api.nvim_win_get_cursor(win), encoding)
+  local node = M.enclosing_function_at(bufnr, vim.api.nvim_win_get_cursor(win), encoding)
   if node then
     return {
       name = node.name,
@@ -127,46 +161,90 @@ function M.resolve_root(bufnr)
   return nil, nil, nil
 end
 
---- Create the fetch function injected into graph building. Issues the
---- incoming/outgoing call request on `client` and returns a Deferred resolving
---- to `{ item, call_site }` entries.
-function M.make_fetch(client, encoding)
+--- Standard (spec) call-hierarchy fetch for one node. Returns a Deferred
+--- resolving to `{ calls = {...}, err = friendly-string-or-nil }`. An error is
+--- reported in the result rather than rejected so the caller can decide whether
+--- to fall back to the heuristic.
+local function standard_fetch(client, encoding, node, direction)
+  local d = util.Deferred.new()
+  -- Pass the item through verbatim (including the server's opaque `data`
+  -- field) — clangd resolves the symbol via that data on later requests.
+  local item = node.item or {
+    name = node.name,
+    kind = node.kind,
+    uri = node.uri,
+    range = node.range,
+    selectionRange = node.selectionRange,
+  }
+  -- Note: only prepareCallHierarchy uses the textDocument/ prefix; the
+  -- incoming/outgoing calls are callHierarchy/* methods in the LSP spec.
+  local method = direction == 'callout' and 'callHierarchy/outgoingCalls' or 'callHierarchy/incomingCalls'
+  client.request(method, { item = item }, function(err, result)
+    if err then
+      -- clangd < 20 advertises call hierarchy but does not implement
+      -- outgoingCalls; turn the opaque -32601 into something actionable.
+      if err.code == -32601 or (err.message and err.message:find('method not found')) then
+        d:resolve({ calls = {}, err = '语言服务器未实现 ' .. method .. '（clangd 的 outgoingCalls 需要 LLVM ≥ 20，callin/incomingCalls 通常可用）' })
+      else
+        d:resolve({ calls = {}, err = tostring(err.message or err) })
+      end
+      return
+    end
+    local calls = {}
+    for _, c in ipairs(result or {}) do
+      local citem = direction == 'callout' and c.to or c.from
+      local cs = nil
+      if c.fromRanges and c.fromRanges[1] then
+        cs = { uri = citem.uri, line = c.fromRanges[1].start.line }
+      end
+      calls[#calls + 1] = { item = citem, call_site = cs }
+    end
+    d:resolve({ calls = calls })
+  end, vim.uri_to_bufnr(node.uri))
+  return d
+end
+
+--- Create the fetch function injected into graph building.
+---
+--- Strategy per node: try the standard call-hierarchy request; if the server
+--- rejects the method (clangd < 20 outgoingCalls) remember it is broken for the
+--- whole build and stop trying; if the standard result is empty, try the
+--- heuristic fallback and prefer whichever returns more. `opts.fallback` gates
+--- the heuristic (default true). When fallback is disabled, a server error is
+--- surfaced as an error instead of being silently swallowed.
+function M.make_fetch(client, encoding, opts)
+  local fallback_fetch = fallback_mod.make_fetch(client, encoding, M.enclosing_function_at, M.find_functions_by_name)
+  local std_broken = {} -- direction -> bool
   return function(node, direction)
     local d = util.Deferred.new()
-    -- Pass the item through verbatim (including the server's opaque `data`
-    -- field) — clangd resolves the symbol via that data on later requests.
-    local item = node.item or {
-      name = node.name,
-      kind = node.kind,
-      uri = node.uri,
-      range = node.range,
-      selectionRange = node.selectionRange,
-    }
-    -- Note: only prepareCallHierarchy uses the textDocument/ prefix; the
-    -- incoming/outgoing calls are callHierarchy/* methods in the LSP spec.
-    local method = direction == 'callout' and 'callHierarchy/outgoingCalls' or 'callHierarchy/incomingCalls'
-    client.request(method, { item = item }, function(err, result)
-      if err then
-        -- clangd < 20 advertises call hierarchy but does not implement
-        -- outgoingCalls; turn the opaque -32601 into something actionable.
-        if err.code == -32601 or (err.message and err.message:find('method not found')) then
-          d:reject('语言服务器未实现 ' .. method .. '（clangd 的 outgoingCalls 需要 LLVM ≥ 20，callin/incomingCalls 通常可用）')
-        else
-          d:reject(err)
+    util.async_start(function()
+      local ok, calls = pcall(function()
+        local std_calls, std_err
+        if not std_broken[direction] then
+          local res = util.await(standard_fetch(client, encoding, node, direction))
+          std_calls, std_err = res.calls, res.err
+          if std_err then std_broken[direction] = true end
         end
-        return
-      end
-      local calls = {}
-      for _, c in ipairs(result or {}) do
-        local citem = direction == 'callout' and c.to or c.from
-        local cs = nil
-        if c.fromRanges and c.fromRanges[1] then
-          cs = { uri = citem.uri, line = c.fromRanges[1].start.line }
+        if std_broken[direction] then std_calls = nil end
+
+        if opts and opts.fallback then
+          -- Fall back when the standard method is broken OR returned nothing.
+          if std_broken[direction] or not std_calls or #std_calls == 0 then
+            if std_broken[direction] and direction == 'callout' then
+              notify_once('fallback_callout', '服务器不支持 outgoingCalls，callout 使用函数体扫描启发式')
+            end
+            local fb = util.await(fallback_fetch(node, direction))
+            if #fb > 0 then return fb end
+          end
+          return std_calls or {}
         end
-        calls[#calls + 1] = { item = citem, call_site = cs }
-      end
-      d:resolve(calls)
-    end, vim.uri_to_bufnr(node.uri))
+
+        -- No fallback: surface server errors.
+        if std_err then error(std_err, 0) end
+        return std_calls or {}
+      end)
+      if ok then d:resolve(calls) else d:reject(calls) end
+    end)
     return d
   end
 end
