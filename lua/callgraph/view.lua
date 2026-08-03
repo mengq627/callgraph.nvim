@@ -116,6 +116,7 @@ function M.render_view()
   M.resize_window(opts, layout)
   render_mod.render(state.buf, layout, state.graph, {
     selected_id = state.selected_id,
+    highlight = opts.highlight,
     highlights = opts.highlights,
   })
   M.focus_selected()

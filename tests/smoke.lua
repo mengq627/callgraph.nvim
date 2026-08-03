@@ -239,6 +239,27 @@ check('same-column edge connects A->B', (function()
   return false
 end)())
 
+-- ---- Test 11: highlight toggle (default off -> no extmarks; on -> only the
+-- selected box's text content gets one focus extmark, borders/lines excluded).
+local hl = config.get().highlights
+
+render_mod.render(buf, lay, g, { selected_id = nid(main), highlight = false, highlights = hl })
+local em_off = vim.api.nvim_buf_get_extmarks(buf, render_mod.ns, 0, -1, {})
+check('highlight off -> no extmarks', #em_off == 0)
+
+render_mod.render(buf, lay, g, { selected_id = nid(main), highlight = true, highlights = hl })
+local em_on = vim.api.nvim_buf_get_extmarks(buf, render_mod.ns, 0, -1, { details = true })
+check('highlight on -> exactly one extmark', #em_on == 1)
+local box_main = lay.boxes[nid(main)]
+local e0 = em_on[1]
+check('focus covers the box text only', e0[2] == box_main.row and e0[3] == box_main.col and (e0[4].end_col or 0) == box_main.col + box_main.text_width)
+check('focus group is the configured one', e0[4].hl_group == hl.focus)
+
+-- rendering text still works regardless of the toggle
+render_mod.render(buf, lay, g, { selected_id = nid(main), highlight = false, highlights = hl })
+local txt4 = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n')
+check('canvas text still drawn when highlight off', txt4:find('main') ~= nil and txt4:find('func_l2_c') ~= nil)
+
 print('---')
 if failed == 0 then
   print('SMOKE OK')

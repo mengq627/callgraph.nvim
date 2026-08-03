@@ -8,6 +8,10 @@ M.defaults = {
   max_depth = 4,
   -- Show the call-site location (file:line) inside each box.
   show_call_site = true,
+  -- Highlight toggle. When true, the selected box's text (name + location)
+  -- is colored (default green); borders and lines stay unhighlighted. When
+  -- false (default), no highlight code runs at all.
+  highlight = false,
   -- When a server lacks call-hierarchy support (clangd < 20 for outgoingCalls),
   -- fall back to heuristics: scan the function body and resolve each call token
   -- (callout), or use references + documentSymbol (callin). Set false to use
@@ -25,12 +29,7 @@ M.defaults = {
     max_loc_width = 22,
   },
   highlights = {
-    canvas = 'CallgraphCanvas',
-    box = 'CallgraphBox',
-    focus = 'CallgraphFocus',
-    cycle = 'CallgraphCycle',
-    edge = 'CallgraphEdge',
-    collapsed = 'CallgraphCollapsed',
+    focus = 'CallgraphFocus', -- selected box text color (used when highlight = true)
   },
   -- All in-view keymaps. Set an entry to '' to disable that binding.
   keymaps = {
@@ -66,14 +65,11 @@ function M.get()
 end
 
 --- Define highlight groups. `default = true` lets a colorscheme override them.
+--- No-op when the `highlight` toggle is off (no highlight-related work runs).
 function M.define_highlights()
+  if not M.get().highlight then return end
   local h = M.get().highlights
-  vim.api.nvim_set_hl(0, h.canvas, { default = true, link = 'NormalFloat' })
-  vim.api.nvim_set_hl(0, h.box, { default = true, fg = '#5d6478' })
   vim.api.nvim_set_hl(0, h.focus, { default = true, fg = '#98c379', bold = true })
-  vim.api.nvim_set_hl(0, h.cycle, { default = true, fg = '#f7768e', bold = true })
-  vim.api.nvim_set_hl(0, h.edge, { default = true, fg = '#5d6478' })
-  vim.api.nvim_set_hl(0, h.collapsed, { default = true, fg = '#7aa2f7' })
 end
 
 return M

@@ -130,15 +130,8 @@ function M.layout(graph, opts, view_state)
     local coll_str = ''
     if n.has_children and not all_children_visible(graph, n) then coll_str = ' ▸' end
 
-    local name_chars = util.char_count(name)
     local text = name .. cycle_str .. loc_str .. coll_str
-    texts[n.id] = {
-      text = text,
-      -- 0-based character offset of the cycle glyph inside `text` (box text row).
-      cycle_pos = n.is_cycle and (name_chars + 1) or nil,
-      collapse_pos = (n.has_children and not all_children_visible(graph, n)) and
-        (name_chars + util.char_count(cycle_str) + util.char_count(loc_str) + 1) or nil,
-    }
+    texts[n.id] = { text = text }
   end
 
   -- Group into columns and size each column.
@@ -176,8 +169,7 @@ function M.layout(graph, opts, view_state)
         width = w,
         height = BOX_H,
         text = t.text,
-        cycle_col = t.cycle_pos and (col_x[c] + 1 + t.cycle_pos) or nil,
-        collapse_col = t.collapse_pos and (col_x[c] + 1 + t.collapse_pos) or nil,
+        text_width = util.char_count(t.text),
       }
       if cy + BOX_H - 1 > max_bottom then max_bottom = cy + BOX_H - 1 end
       cy = cy + BOX_H + row_gap

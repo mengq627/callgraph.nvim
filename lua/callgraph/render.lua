@@ -98,55 +98,20 @@ function M.render(buf, layout, graph, view)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   vim.bo[buf].modifiable = modifiable
 
-  -- Highlights.
+  -- Highlighting is opt-in and defaults to off. When off, no highlight code
+  -- runs at all; the canvas is drawn with the default terminal colors.
+  if not view.highlight then return end
+
   vim.api.nvim_buf_clear_namespace(buf, M.ns, 0, -1)
-  local hl = view.highlights
-
-  for id, b in pairs(layout.boxes) do
-    for rr = b.row, b.row + b.height - 1 do
-      -- Selected box: color only the text row (b.row + 1); borders stay dim.
-      local group = (id == view.selected_id and rr == b.row + 1) and hl.focus or hl.box
-      vim.api.nvim_buf_set_extmark(buf, M.ns, rr - 1, b.col - 1, {
-        end_col = b.col - 1 + b.width,
-        hl_group = group,
-        priority = 2,
-      })
-    end
-    if b.cycle_col then
-      vim.api.nvim_buf_set_extmark(buf, M.ns, b.row, b.cycle_col - 1, {
-        end_col = b.cycle_col,
-        hl_group = hl.cycle,
-        priority = 5,
-      })
-    end
-    if b.collapse_col then
-      vim.api.nvim_buf_set_extmark(buf, M.ns, b.row, b.collapse_col - 1, {
-        end_col = b.collapse_col,
-        hl_group = hl.collapsed,
-        priority = 4,
-      })
-    end
-  end
-
-  for _, e in ipairs(layout.edges) do
-    for _, seg in ipairs(e.segments) do
-      local r1, c1 = math.min(seg.r1, seg.r2), math.min(seg.c1, seg.c2)
-      local r2, c2 = math.max(seg.r1, seg.r2), math.max(seg.c1, seg.c2)
-      vim.api.nvim_buf_set_extmark(buf, M.ns, r1 - 1, c1 - 1, {
-        end_row = r2,
-        end_col = c2,
-        hl_group = hl.edge,
-        priority = 1,
-      })
-    end
-    -- Arrowheads must be highlighted too, or they render as default white.
-    if e.arrow then
-      vim.api.nvim_buf_set_extmark(buf, M.ns, e.arrow.row - 1, e.arrow.col - 1, {
-        end_col = e.arrow.col,
-        hl_group = hl.edge,
-        priority = 1,
-      })
-    end
+  -- Only the selected box's text content (name + location) is colored; box
+  -- borders and connection lines stay unhighlighted.
+  local box = layout.boxes[view.selected_id]
+  if box then
+    vim.api.nvim_buf_set_extmark(buf, M.ns, box.row, box.col, {
+      end_col = box.col + box.text_width,
+      hl_group = view.highlights.focus,
+      priority = 2,
+    })
   end
 end
 

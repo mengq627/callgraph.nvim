@@ -53,7 +53,7 @@ local opts = config.get()
 local sel = graph_mod.node_id(main)
 local lay = layout_mod.layout(g, opts, { direction = 'callout', selected_id = sel })
 local buf = vim.api.nvim_create_buf(false, true)
-render_mod.render(buf, lay, g, { selected_id = sel, highlights = opts.highlights })
+render_mod.render(buf, lay, g, { selected_id = sel, highlight = true, highlights = opts.highlights })
 
 local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 print('--- canvas (' .. lay.width .. 'x' .. lay.height .. ') ---')

@@ -73,6 +73,8 @@ require('callgraph').setup({
   max_depth = 4,          -- 默认最多展开的边数
   show_call_site = true,  -- 框内显示 文件:行号
   fallback = true,        -- 服务器缺 call hierarchy 时用启发式兜底（扫描调用点 / references）
+  highlight = false,      -- 高亮开关（默认关）。开启后仅把选中框的"函数名 + 位置"文本标色，
+                          -- 边框和连线不高亮；关闭时完全不执行高亮代码。
   window = {
     max_width_ratio = 0.8,   -- 右侧 split 的最大宽度（占编辑器）
     row_gap = 2,             -- 列内框的垂直间距
@@ -80,12 +82,8 @@ require('callgraph').setup({
     max_name_width = 26,     -- 函数名截断长度
     max_loc_width = 22,      -- 位置标注截断长度
   },
-  highlights = {            -- 各元素的高亮组
-    box = 'CallgraphBox',
-    focus = 'CallgraphFocus',     -- 选中框文本（默认绿色）
-    cycle = 'CallgraphCycle',     -- ⟳
-    edge = 'CallgraphEdge',
-    collapsed = 'CallgraphCollapsed', -- ▸
+  highlights = {            -- 选中文本的高亮组（仅 highlight = true 时生效）
+    focus = 'CallgraphFocus', -- 默认绿色
   },
   keymaps = {               -- 全部可重映射；设为 '' 禁用
     move_left = 'h', move_down = 'j', move_up = 'k', move_right = 'l',
