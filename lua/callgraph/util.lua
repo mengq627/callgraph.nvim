@@ -141,6 +141,37 @@ function M.pos_to_byte(line, pos_char, encoding)
   return i - 1
 end
 
+-- ---------------------------------------------------------------------------
+-- Buffer position helpers. nvim_win_set_cursor and nvim_buf_set_extmark take
+-- BYTE columns, while our layout works in CHARACTER columns. Convert between
+-- the two for a line of UTF-8 text.
+-- ---------------------------------------------------------------------------
+
+--- Byte column of the character at `char_col` (0-based both).
+function M.char_to_byte(line, char_col)
+  return #vim.fn.strcharpart(line, 0, char_col)
+end
+
+--- Character column (0-based) of the byte at `byte_col`.
+function M.byte_to_char(line, byte_col)
+  local i, chars = 1, 0
+  local n = #line
+  while i <= byte_col and i <= n do
+    local b = string.byte(line, i)
+    if b < 0x80 then
+      i = i + 1
+    elseif b < 0xE0 then
+      i = i + 2
+    elseif b < 0xF0 then
+      i = i + 3
+    else
+      i = i + 4
+    end
+    chars = chars + 1
+  end
+  return chars
+end
+
 --- Resolve when all Deferreds resolve. Results are collected positionally;
 --- a rejected Deferred contributes `nil` (never rejects the aggregate).
 function M.all(deferreds)

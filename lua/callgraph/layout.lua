@@ -131,7 +131,7 @@ function M.layout(graph, opts, view_state)
     if n.has_children and not all_children_visible(graph, n) then coll_str = ' ▸' end
 
     local text = name .. cycle_str .. loc_str .. coll_str
-    texts[n.id] = { text = text }
+    texts[n.id] = { text = text, name_width = util.char_count(name) }
   end
 
   -- Group into columns and size each column.
@@ -170,6 +170,11 @@ function M.layout(graph, opts, view_state)
         height = BOX_H,
         text = t.text,
         text_width = util.char_count(t.text),
+        name_width = t.name_width,
+        -- Function-name span in 0-based buffer columns: [name_start, name_end).
+        -- Only the name is highlighted (not the trailing location label).
+        name_start = col_x[c],
+        name_end = col_x[c] + t.name_width,
       }
       if cy + BOX_H - 1 > max_bottom then max_bottom = cy + BOX_H - 1 end
       cy = cy + BOX_H + row_gap

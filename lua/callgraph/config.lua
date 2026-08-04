@@ -11,7 +11,7 @@ M.defaults = {
   -- Highlight toggle. When true, the selected box's text (name + location)
   -- is colored (default green); borders and lines stay unhighlighted. When
   -- false (default), no highlight code runs at all.
-  highlight = false,
+  highlight = true,
   -- When a server lacks call-hierarchy support (clangd < 20 for outgoingCalls),
   -- fall back to heuristics: scan the function body and resolve each call token
   -- (callout), or use references + documentSymbol (callin). Set false to use
@@ -62,6 +62,12 @@ end
 
 function M.get()
   return M.merged or vim.deepcopy(M.defaults)
+end
+
+--- Incrementally update the active config at runtime (used by :CallgraphDebug).
+function M.update(opts)
+  M.merged = M.merged or vim.deepcopy(M.defaults)
+  M.merged = vim.tbl_deep_extend('force', M.merged, opts or {})
 end
 
 --- Define highlight groups. `default = true` lets a colorscheme override them.

@@ -3,6 +3,7 @@
 --- glue between LSP data and the layout/render core.
 
 local config = require('callgraph.config')
+local debug = require('callgraph.debug')
 local graph_mod = require('callgraph.graph')
 local layout_mod = require('callgraph.layout')
 local render_mod = require('callgraph.render')
@@ -135,11 +136,26 @@ end
 
 function M.focus_selected()
   if not state or not state.win or not vim.api.nvim_win_is_valid(state.win) then return end
-  local box = state.last_layout and state.last_layout.boxes[state.selected_id]
-  if not box then return end
+  local layout = state.last_layout
+  if not layout then return end
+  local mark_id = layout.box_marks and layout.box_marks[state.selected_id]
+  if not mark_id then return end
+  -- The selected box's text start comes from its anchor extmark (source of
+  -- truth), so the cursor always lands on the same character the highlight
+  -- covers. box.col - 1 used to land on the box's left border instead.
+  local pos = vim.api.nvim_buf_get_extmark_by_id(state.buf, render_mod.anchor_ns, mark_id, {})
+  if not pos then return end
+  -- pos[2] is a BYTE column (nvim_win_set_cursor is byte-based).
+  local crow, ccol = pos[1] + 1, pos[2]
+  -- nvim_win_set_cursor already scrolls to make the cursor visible; no `zt`
+  -- (it shifted the column).
   pcall(function()
-    vim.api.nvim_win_set_cursor(state.win, { box.row, box.col - 1 })
-    vim.api.nvim_win_call(state.win, function() vim.cmd('normal! zt') end)
+    vim.api.nvim_win_set_cursor(state.win, { crow, ccol })
+    local line_text = vim.api.nvim_buf_get_lines(state.buf, crow - 1, crow, false)[1] or ''
+    local char_idx = util.byte_to_char(line_text, ccol)
+    local char_at = vim.fn.strcharpart(line_text, char_idx, 1)
+    debug.log('location', 'focus_selected', 'anchor=(' .. pos[1] .. ',' .. pos[2] .. ')',
+      'cursor=(' .. crow .. ',' .. ccol .. ')', 'char=' .. vim.inspect(char_at))
   end)
 end
 

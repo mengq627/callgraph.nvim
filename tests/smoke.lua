@@ -252,7 +252,13 @@ local em_on = vim.api.nvim_buf_get_extmarks(buf, render_mod.ns, 0, -1, { details
 check('highlight on -> exactly one extmark', #em_on == 1)
 local box_main = lay.boxes[nid(main)]
 local e0 = em_on[1]
-check('focus covers the box text only', e0[2] == box_main.row and e0[3] == box_main.col and (e0[4].end_col or 0) == box_main.col + box_main.text_width)
+-- extmark cols are BYTE offsets; verify against char->byte conversion.
+local tline = table.concat(vim.api.nvim_buf_get_lines(buf, box_main.row, box_main.row + 1, false), '\n')
+local c2b = util.char_to_byte
+check('focus covers the name only',
+  e0[2] == box_main.row and e0[3] == c2b(tline, box_main.col)
+  and (e0[4].end_col or 0) == c2b(tline, box_main.col + box_main.name_width))
+check('name width is the function name length', box_main.name_width == vim.fn.strchars('main'))
 check('focus group is the configured one', e0[4].hl_group == hl.focus)
 
 -- rendering text still works regardless of the toggle
