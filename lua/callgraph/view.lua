@@ -119,6 +119,7 @@ function M.render_view()
     selected_id = state.selected_id,
     highlight = opts.highlight,
     highlights = opts.highlights,
+    arrows = opts.window.arrows,
   })
   M.focus_selected()
 end

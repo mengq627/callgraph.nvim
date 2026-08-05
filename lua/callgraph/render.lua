@@ -17,6 +17,15 @@ local util = require('callgraph.util')
 -- Box height in rows (top border, text, bottom border).
 local BOX_H = 3
 
+-- Junction glyphs by connection mask (1=N, 2=S, 4=W, 8=E).
+local GLYPH = {
+  [1] = '│', [2] = '│', [3] = '│',
+  [4] = '─', [8] = '─', [12] = '─',
+  [5] = '┘', [6] = '┐', [9] = '└', [10] = '┌',
+  [7] = '├', [11] = '┤', [13] = '┴', [14] = '┬',
+  [15] = '┼',
+}
+
 local function make_grid(H, W)
   local grid = {}
   for r = 1, H do
@@ -79,17 +88,50 @@ function M.render(buf, layout, graph, view)
   local H = math.max(layout.height, 1)
   local grid = make_grid(H, W)
 
-  -- Edges first.
+  -- Edges first. Build a per-cell connection mask (1=N, 2=S, 4=W, 8=E) from
+  -- all axis-aligned runs, then render the correct box-drawing glyph per cell
+  -- (corners, T-junctions, crossings). This keeps line junctions connected.
+  local bit = require('bit')
+  local masks = {} -- 'r,c' -> bitmask (1=N, 2=S, 4=W, 8=E), OR-ed across runs
+  local hints = {} -- 'r,c' -> 'h'|'v' for single-cell runs
   for _, e in ipairs(layout.edges) do
     for _, seg in ipairs(e.segments) do
-      for rr = seg.r1, seg.r2 do
+      if seg.dir == 'h' then
         for cc = seg.c1, seg.c2 do
-          put(grid, rr, cc, seg.ch)
+          local k = seg.r1 .. ',' .. cc
+          local m = masks[k] or 0
+          if cc > seg.c1 then m = bit.bor(m, 4) end
+          if cc < seg.c2 then m = bit.bor(m, 8) end
+          masks[k] = m
+          hints[k] = 'h'
+        end
+      else
+        for rr = seg.r1, seg.r2 do
+          local k = rr .. ',' .. seg.c1
+          local m = masks[k] or 0
+          if rr > seg.r1 then m = bit.bor(m, 1) end
+          if rr < seg.r2 then m = bit.bor(m, 2) end
+          masks[k] = m
+          hints[k] = 'v'
         end
       end
     end
+  end
+  for k, m in pairs(masks) do
+    if m == 0 then -- single-cell run: render as its direction
+      m = (hints[k] == 'v') and 3 or 12
+    end
+    local rr, cc = k:match('^(%d+),(%d+)$')
+    put(grid, tonumber(rr), tonumber(cc), GLYPH[m])
+  end
+
+  -- Arrowheads: glyphs come from `view.arrows` (config `window.arrows`) so
+  -- Unicode triangles or Nerd Font arrows can be chosen freely.
+  local arrows = view.arrows or { right = '▶', down = '▼', up = '▲', left = '◀' }
+  for _, e in ipairs(layout.edges) do
     if e.arrow then
-      put(grid, e.arrow.row, e.arrow.col, e.arrow.ch or '>')
+      local ch = (e.arrow.dir == 'd' and arrows.down) or (e.arrow.dir == 'u' and arrows.up) or (e.arrow.dir == 'l' and arrows.left) or arrows.right
+      put(grid, e.arrow.row, e.arrow.col, ch)
     end
   end
 

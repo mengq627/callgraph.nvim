@@ -34,64 +34,67 @@ local function all_children_visible(graph, n)
   return true
 end
 
+-- Emit a plain axis-aligned run (no glyphs): junction glyphs are resolved at
+-- render time so crossings/turns render as proper ┬ ├ ┼ shapes, and the arrow
+-- connects to the line through a short dash (`└─→`) instead of floating (`└>`).
+local function add_run(segments, r1, c1, r2, c2, dir)
+  segments[#segments + 1] = { r1 = r1, c1 = c1, r2 = r2, c2 = c2, dir = dir }
+end
+
 local function add_forward_edge(edges, sb, tb)
   local R1 = sb.row + 1
   local R2 = tb.row + 1
   local src_right = sb.col + sb.width - 1
   local tgt_left = tb.col
-  local xj = tgt_left - 2
-  if xj < src_right + 1 then xj = src_right + 1 end
   local segments = {}
   if R1 == R2 then
+    -- straight: dashes up to the arrowhead at the child's left gap
     if tgt_left - 2 >= src_right + 1 then
-      segments[#segments + 1] = { r1 = R1, c1 = src_right + 1, r2 = R1, c2 = tgt_left - 2, ch = '─' }
+      add_run(segments, R1, src_right + 1, R1, tgt_left - 2, 'h')
     end
-  elseif R1 < R2 then
-    if xj - 1 >= src_right + 1 then
-      segments[#segments + 1] = { r1 = R1, c1 = src_right + 1, r2 = R1, c2 = xj - 1, ch = '─' }
-    end
-    segments[#segments + 1] = { r1 = R1, c1 = xj, r2 = R1, c2 = xj, ch = '┐' }
-    if R2 - R1 > 1 then
-      segments[#segments + 1] = { r1 = R1 + 1, c1 = xj, r2 = R2 - 1, c2 = xj, ch = '│' }
-    end
-    segments[#segments + 1] = { r1 = R2, c1 = xj, r2 = R2, c2 = xj, ch = '└' }
   else
-    if xj - 1 >= src_right + 1 then
-      segments[#segments + 1] = { r1 = R1, c1 = src_right + 1, r2 = R1, c2 = xj - 1, ch = '─' }
+    local xj = tgt_left - 3
+    if xj < src_right + 1 then xj = src_right + 1 end
+    if xj >= src_right + 1 then
+      add_run(segments, R1, src_right + 1, R1, xj, 'h')
     end
-    segments[#segments + 1] = { r1 = R1, c1 = xj, r2 = R1, c2 = xj, ch = '┘' }
-    if R1 - R2 > 1 then
-      segments[#segments + 1] = { r1 = R2 + 1, c1 = xj, r2 = R1 - 1, c2 = xj, ch = '│' }
+    if R1 < R2 then
+      add_run(segments, R1, xj, R2, xj, 'v')
+    else
+      add_run(segments, R2, xj, R1, xj, 'v')
     end
-    segments[#segments + 1] = { r1 = R2, c1 = xj, r2 = R2, c2 = xj, ch = '┌' }
+    -- connector to the cell before the arrowhead; includes the corner cell
+    if tgt_left - 2 >= xj then
+      add_run(segments, R2, xj, R2, tgt_left - 2, 'h')
+    end
   end
-  edges[#edges + 1] = { segments = segments, arrow = { row = R2, col = tgt_left - 1 } }
+  edges[#edges + 1] = { segments = segments, arrow = { row = R2, col = tgt_left - 1, dir = 'r' } }
 end
 
 --- Same-column edge: straight vertical between the caller box and the callee
---- box (same column). The arrow always points INTO the callee; its glyph is
---- derived from the relative rows so either stacking order renders correctly.
+--- box (same column). The arrow always points INTO the callee; its direction
+--- is derived from the relative rows so either stacking order renders correctly.
 --- If a box sits between them the line passes behind it (edges are drawn
 --- before boxes), acceptable for the rare same-column case.
 local function add_same_column_edge(edges, caller_box, callee_box)
   local segments = {}
   local ex = caller_box.col + math.floor(caller_box.width / 2)
   if callee_box.row > caller_box.row then
-    -- callee below: line from caller bottom down, arrow v into callee top
+    -- callee below: vertical down, arrow ▼ into the callee's top border
     local line_top = caller_box.row + caller_box.height
     local line_bottom = callee_box.row - 2
     if line_bottom >= line_top then
-      segments[#segments + 1] = { r1 = line_top, c1 = ex, r2 = line_bottom, c2 = ex, ch = '│' }
+      add_run(segments, line_top, ex, line_bottom, ex, 'v')
     end
-    edges[#edges + 1] = { segments = segments, arrow = { row = callee_box.row - 1, col = ex, ch = 'v' } }
+    edges[#edges + 1] = { segments = segments, arrow = { row = callee_box.row - 1, col = ex, dir = 'd' } }
   else
-    -- callee above: line from caller top up, arrow ^ into callee bottom
+    -- callee above: vertical up, arrow ▲ into the callee's bottom border
     local line_top = caller_box.row - 1
     local line_bottom = callee_box.row + callee_box.height + 1
     if line_top >= line_bottom then
-      segments[#segments + 1] = { r1 = line_bottom, c1 = ex, r2 = line_top, c2 = ex, ch = '│' }
+      add_run(segments, line_bottom, ex, line_top, ex, 'v')
     end
-    edges[#edges + 1] = { segments = segments, arrow = { row = callee_box.row + callee_box.height, col = ex, ch = '^' } }
+    edges[#edges + 1] = { segments = segments, arrow = { row = callee_box.row + callee_box.height, col = ex, dir = 'u' } }
   end
 end
 

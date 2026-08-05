@@ -27,6 +27,10 @@ M.defaults = {
     -- Box text limits (in characters) before truncation kicks in.
     max_name_width = 26,
     max_loc_width = 22,
+    -- Arrowhead glyphs. Unicode triangles (▶▼▲) may render small in some
+    -- fonts; Nerd Font users can use Font Awesome arrows () which fill the
+    -- cell consistently.
+    arrows = { right = '▶', down = '▼', up = '▲', left = '◀' },
   },
   highlights = {
     focus = 'CallgraphFocus', -- selected box text color (used when highlight = true)
