@@ -127,7 +127,7 @@ function M.render(buf, layout, graph, view)
 
   -- Arrowheads: glyphs come from `view.arrows` (config `window.arrows`) so
   -- Unicode triangles or Nerd Font arrows can be chosen freely.
-  local arrows = view.arrows or { right = '▶', down = '▼', up = '▲', left = '◀' }
+  local arrows = view.arrows or { right = '', down = '', up = '', left = '' }
   for _, e in ipairs(layout.edges) do
     if e.arrow then
       local ch = (e.arrow.dir == 'd' and arrows.down) or (e.arrow.dir == 'u' and arrows.up) or (e.arrow.dir == 'l' and arrows.left) or arrows.right

@@ -27,10 +27,12 @@ M.defaults = {
     -- Box text limits (in characters) before truncation kicks in.
     max_name_width = 26,
     max_loc_width = 22,
-    -- Arrowhead glyphs. Unicode triangles (▶▼▲) may render small in some
-    -- fonts; Nerd Font users can use Font Awesome arrows () which fill the
-    -- cell consistently.
-    arrows = { right = '▶', down = '▼', up = '▲', left = '◀' },
+    -- Arrowhead glyphs (Nerd Font). Default: Font Awesome solid arrows.
+    -- Alternatives:
+    --   { right='', down='', up='', left='' }  -- FA chevrons（粗 > 风格）
+    --   { right='➡', down='⬇', up='⬆', left='⬅' }   -- 重型 Unicode 箭头（无需 Nerd Font）
+    --   { right='→', down='↓', up='↑', left='←' }   -- Unicode 带杆（无需 Nerd Font）
+    arrows = { right = '', down = '', up = '', left = '' },
   },
   highlights = {
     focus = 'CallgraphFocus', -- selected box text color (used when highlight = true)
