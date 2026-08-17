@@ -70,6 +70,9 @@ view.move('right'); vim.wait(200, function() return false end)
 local sc1 = vim.wo[win].scroll or 0
 check('scrolled right to reach l2c', sc1 > 0, 'scroll=' .. sc1)
 check('cursor visible after moving right', visible_ok(), 'char=' .. char_col() .. ' scroll=' .. sc1)
+-- The box is centered, so the cursor is not hugging the window edge.
+check('right box centered (not hugging edge)', char_col() - sc1 < vim.api.nvim_win_get_width(win) / 2,
+  'char=' .. char_col() .. ' scroll=' .. sc1)
 
 view.move('left'); vim.wait(200, function() return false end)
 view.move('left'); vim.wait(200, function() return false end)
@@ -77,6 +80,8 @@ view.move('left'); vim.wait(200, function() return false end)
 local sc2 = vim.wo[win].scroll or 0
 check('scrolled back left to main', sc2 < sc1, 'scroll=' .. sc2)
 check('cursor visible after moving left', visible_ok(), 'char=' .. char_col() .. ' scroll=' .. sc2)
+check('left box centered (not hugging edge)', char_col() - sc2 < vim.api.nvim_win_get_width(win) / 2,
+  'char=' .. char_col() .. ' scroll=' .. sc2)
 
 view.close()
 print('---')

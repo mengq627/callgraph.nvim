@@ -240,23 +240,32 @@ function M.focus_selected()
   local crow, ccol = pos[1] + 1, pos[2]
   pcall(function()
     vim.api.nvim_win_set_cursor(state.win, { crow, ccol })
-    -- The canvas can be wider than the fixed window: scroll horizontally so
-    -- the focused box's text is always visible. `vim.wo[win].scroll` is the
-    -- window's left-edge character column (0-based).
+    -- Keep the focused box fully visible and roughly centered. The canvas can
+    -- be wider than the fixed window, so scroll horizontally; `vim.wo[win].scroll`
+    -- is the window's left-edge character column (0-based).
+    local box = layout.boxes[tab.selected_id]
     local line_text = vim.api.nvim_buf_get_lines(state.buf, crow - 1, crow, false)[1] or ''
     local char_idx = util.byte_to_char(line_text, ccol)
-    local winw = vim.api.nvim_win_get_width(state.win)
-    local cur_scroll = vim.wo[state.win].scroll or 0
-    local target = cur_scroll
-    if char_idx < cur_scroll then
-      target = math.max(0, char_idx - 2)
-    elseif char_idx + 1 > cur_scroll + winw - 1 then
-      target = char_idx + 1 - winw + 2
+    if box then
+      local winw = vim.api.nvim_win_get_width(state.win)
+      local cur_scroll = vim.wo[state.win].scroll or 0
+      local bw = box.width
+      local target = cur_scroll
+      if char_idx < cur_scroll or char_idx + bw - 1 > cur_scroll + winw - 3 then
+        -- Box clipped by the window edge -> center it (with a small bias to
+        -- keep earlier columns reachable).
+        target = math.max(0, math.floor(char_idx + bw / 2 - winw / 2))
+      end
+      if target ~= cur_scroll then vim.wo[state.win].scroll = target end
+      local char_at = vim.fn.strcharpart(line_text, char_idx, 1)
+      debug.log('location', 'focus_selected', 'anchor=(' .. pos[1] .. ',' .. pos[2] .. ')',
+        'cursor=(' .. crow .. ',' .. ccol .. ')', 'char=' .. vim.inspect(char_at), 'box_w=' .. bw,
+        'scroll=' .. target)
     end
-    if target ~= cur_scroll then vim.wo[state.win].scroll = target end
-    local char_at = vim.fn.strcharpart(line_text, char_idx, 1)
-    debug.log('location', 'focus_selected', 'anchor=(' .. pos[1] .. ',' .. pos[2] .. ')',
-      'cursor=(' .. crow .. ',' .. ccol .. ')', 'char=' .. vim.inspect(char_at), 'scroll=' .. target)
+    -- Vertically center the cursor line so the 3-row box sits mid-window.
+    vim.api.nvim_win_call(state.win, function()
+      vim.cmd('normal! zz')
+    end)
   end)
 end
 
