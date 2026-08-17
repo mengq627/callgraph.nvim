@@ -49,10 +49,14 @@ local function char_col()
   local line = vim.api.nvim_buf_get_lines(buf, c[1] - 1, c[1], false)[1] or ''
   return util.byte_to_char(line, c[2])
 end
+-- winsaveview().leftcol is the window's horizontal scroll position (char col).
+local function leftcol()
+  return vim.api.nvim_win_call(win, function() return vim.fn.winsaveview().leftcol end)
+end
 -- Is the cursor's character within the window's visible horizontal range?
 local function visible_ok()
   local ci = char_col()
-  local sc = vim.wo[win].scroll or 0
+  local sc = leftcol()
   local ww = vim.api.nvim_win_get_width(win)
   return ci >= sc and ci < sc + ww
 end
@@ -67,21 +71,21 @@ check('window fixed width', vim.api.nvim_win_get_width(win) == 15)
 view.move('right'); vim.wait(200, function() return false end)
 view.move('right'); vim.wait(200, function() return false end)
 view.move('right'); vim.wait(200, function() return false end)
-local sc1 = vim.wo[win].scroll or 0
-check('scrolled right to reach l2c', sc1 > 0, 'scroll=' .. sc1)
-check('cursor visible after moving right', visible_ok(), 'char=' .. char_col() .. ' scroll=' .. sc1)
+local sc1 = leftcol()
+check('scrolled right to reach l2c', sc1 > 0, 'leftcol=' .. sc1)
+check('cursor visible after moving right', visible_ok(), 'char=' .. char_col() .. ' leftcol=' .. sc1)
 -- The box is centered, so the cursor is not hugging the window edge.
 check('right box centered (not hugging edge)', char_col() - sc1 < vim.api.nvim_win_get_width(win) / 2,
-  'char=' .. char_col() .. ' scroll=' .. sc1)
+  'char=' .. char_col() .. ' leftcol=' .. sc1)
 
 view.move('left'); vim.wait(200, function() return false end)
 view.move('left'); vim.wait(200, function() return false end)
 view.move('left'); vim.wait(200, function() return false end)
-local sc2 = vim.wo[win].scroll or 0
-check('scrolled back left to main', sc2 < sc1, 'scroll=' .. sc2)
-check('cursor visible after moving left', visible_ok(), 'char=' .. char_col() .. ' scroll=' .. sc2)
+local sc2 = leftcol()
+check('scrolled back left to main', sc2 < sc1, 'leftcol=' .. sc2)
+check('cursor visible after moving left', visible_ok(), 'char=' .. char_col() .. ' leftcol=' .. sc2)
 check('left box centered (not hugging edge)', char_col() - sc2 < vim.api.nvim_win_get_width(win) / 2,
-  'char=' .. char_col() .. ' scroll=' .. sc2)
+  'char=' .. char_col() .. ' leftcol=' .. sc2)
 
 view.close()
 print('---')
