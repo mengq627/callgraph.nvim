@@ -63,6 +63,8 @@ M.defaults = {
     depth_down = '-',
     jump_to_def = '<CR>', -- 跳转到主界面中的函数定义
     jump_to_def_alt = 'd',
+    tab_next = '<Tab>', -- 下一个 tab（覆盖 barbar 等全局映射）
+    tab_prev = '<S-Tab>', -- 上一个 tab
     help = '?',
   },
 }

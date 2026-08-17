@@ -54,14 +54,16 @@ local function set_active(i)
 end
 
 -- ---------------------------------------------------------------------------
--- Tab bar on the native 'tabline'
+-- Tab bar on the window's winbar
 -- ---------------------------------------------------------------------------
 
--- Render the logical tabs onto vim.o.tabline (the native tab bar, same place
--- bufferline/barbar render). Each label is a click target "%N@func@label%X":
--- clicking runs func(N, clicks, button, mods) — N is that tab's index.
-local function update_tabline()
-  if not state then return end
+-- Render the logical tabs onto vim.wo[win].winbar, the native window-local
+-- top bar. Unlike the global 'tabline' (which would span the whole editor and
+-- clash with barbar), the winbar shows only across the callgraph window. Uses
+-- statusline syntax; switching tabs is keyboard-driven (<Tab>/<S-Tab>) because
+-- winbar has no click targets like 'tabline' does.
+local function update_winbar()
+  if not state or not state.win or not vim.api.nvim_win_is_valid(state.win) then return end
   local opts = config.get()
   local hl_active = opts.highlights.tab_active
   local hl_inactive = opts.highlights.tab_inactive
@@ -69,24 +71,9 @@ local function update_tabline()
   for i, t in ipairs(state.tabs) do
     local label = (i == state.active) and ('[' .. t.key .. ']') or t.key
     local hl = (i == state.active) and hl_active or hl_inactive
-    local click = '%' .. i .. '@v:lua.require("callgraph.view").on_tab_click@'
-    parts[#parts + 1] = click .. '%#' .. hl .. '#' .. label .. '%*%X'
+    parts[#parts + 1] = '%#' .. hl .. '#' .. label .. '%*'
   end
-  vim.o.tabline = '%#TabLineFill#' .. table.concat(parts, ' ')
-end
-
--- Take over the tabline while the callgraph window is focused. BufEnter on the
--- callgraph buffer re-runs this so plugins that own 'tabline' (e.g. barbar)
--- don't clobber our labels while we're inside the view.
-local function takeover_tabline()
-  vim.o.showtabline = 2
-  update_tabline()
-end
-
-local function restore_tabline()
-  if not state then return end
-  vim.o.tabline = state.orig_tabline or ''
-  vim.o.showtabline = state.orig_showtabline or 0
+  vim.wo[state.win].winbar = table.concat(parts, '  ')
 end
 
 function M.open_with_root(root, direction, encoding, client)
@@ -111,11 +98,8 @@ function M.open_with_root(root, direction, encoding, client)
       prev_active = nil, -- tab active before the current one
       last_w = nil,
       keyed = false,
-      orig_tabline = vim.o.tabline, -- restore on close (coexists with barbar etc.)
-      orig_showtabline = vim.o.showtabline,
     }
     M.open_float()
-    takeover_tabline()
   else
     if state.win ~= win then
       state.orig_win = win
@@ -205,7 +189,7 @@ function M.render_view()
     highlights = opts.highlights,
     arrows = opts.window.arrows,
   })
-  update_tabline()
+  update_winbar()
   M.focus_selected()
 end
 
@@ -368,7 +352,6 @@ function M.close()
   if state.win and vim.api.nvim_win_is_valid(state.win) then
     pcall(vim.api.nvim_win_close, state.win, true)
   end
-  restore_tabline()
   state = nil
   if orig and vim.api.nvim_win_is_valid(orig) then
     vim.api.nvim_set_current_win(orig)
@@ -436,7 +419,7 @@ function M.show_help()
     '  i / o               callin / callout',
     '  + / -               增加/减少深度',
     '  单击选中 / 双击展开  （鼠标）',
-    '  点击顶部标签条切换 tab，中键关闭',
+    '  Tab / Shift-Tab    切换 tab',
   }, '\n'), vim.log.levels.INFO, { title = 'Callgraph' })
 end
 
@@ -471,6 +454,11 @@ function M.setup_keymaps()
   set(km.depth_down, function() M.change_depth(-1) end)
   set(km.jump_to_def, function() M.jump_to_def() end)
   set(km.jump_to_def_alt, function() M.jump_to_def() end)
+  -- Tab keys switch between callgraph tabs. These buffer-local bindings
+  -- override global ones (e.g. barbar's <Tab> -> BufferNext), so pressing Tab
+  -- inside the view cycles tabs instead of leaving it.
+  set(km.tab_next, function() M.tab_next() end)
+  set(km.tab_prev, function() M.tab_prev() end)
   set(km.help, function() M.show_help() end)
 
   vim.keymap.set('n', '<LeftMouse>', function() M.on_mouse(1) end, opts)
@@ -482,36 +470,24 @@ function M.setup_keymaps()
     buffer = buf,
     callback = function() M.hover_echo() end,
   })
-
-  -- Re-take the tabline whenever we enter the view (plugins like barbar reset
-  -- 'tabline' on BufEnter) and hand it back when we leave.
-  vim.api.nvim_create_autocmd('BufEnter', {
-    buffer = buf,
-    callback = function()
-      if state and vim.api.nvim_get_current_buf() == buf then takeover_tabline() end
-    end,
-  })
-  vim.api.nvim_create_autocmd('BufLeave', {
-    buffer = buf,
-    callback = function()
-      if state then restore_tabline() end
-    end,
-  })
 end
 
---- Click handler for tabline labels ("%N@...@label%X"). N is the tab index;
---- left click switches to it, middle click closes it.
-function M.on_tab_click(i, _, btn)
-  if not state then return end
-  if i < 1 or i > #state.tabs then return end
-  if btn == 'm' then
-    state.active = i
-    M.close_tab()
-  else
-    set_active(i)
-    M.render_view()
-    M.focus_selected()
-  end
+--- Cycle to the next tab (wraps around).
+function M.tab_next()
+  if not state or #state.tabs <= 1 then return end
+  local n = #state.tabs
+  set_active(state.active % n + 1)
+  M.render_view()
+  M.focus_selected()
+end
+
+--- Cycle to the previous tab (wraps around).
+function M.tab_prev()
+  if not state or #state.tabs <= 1 then return end
+  local n = #state.tabs
+  set_active((state.active - 2) % n + 1)
+  M.render_view()
+  M.focus_selected()
 end
 
 return M

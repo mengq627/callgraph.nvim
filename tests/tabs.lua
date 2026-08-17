@@ -1,5 +1,6 @@
 -- Tab behavior: same (function, direction) reuses the tab; different roots
--- create new tabs; close_tab removes the active tab; last tab closes the window.
+-- create new tabs; close_tab removes the active tab; last tab closes the
+-- window. Tab labels render on the window's winbar; <Tab>/<S-Tab> cycle tabs.
 -- Run: nvim --headless -u NONE -l tests/tabs.lua
 
 local here = debug.getinfo(1, 'S').source:sub(2)
@@ -44,21 +45,20 @@ local function check(name, cond, detail)
   if cond then print('PASS ' .. name) else failed = failed + 1; print('FAIL ' .. name .. (detail and (' :: ' .. tostring(detail)) or '')) end
 end
 
--- Tab labels now render on the native 'tabline'. Parse them out of the
--- "%N@func@%#HL#label%*%X" segments (in tab order).
-local function tab_labels()
-  local tl = vim.o.tabline
+-- Tab labels render on the callgraph window's winbar ("%#HL#label%*...").
+local function winbar_labels()
+  local win = vim.api.nvim_get_current_win()
+  local wb = vim.wo[win].winbar or ''
   local labels = {}
-  for n, label in tl:gmatch('%%(%d+)@.-@%%#.-#(.-)%%%*%%X') do
-    labels[tonumber(n)] = label
+  local i = 0
+  for label in wb:gmatch('%%#.-#(.-)%%%*') do
+    i = i + 1
+    labels[i] = label
   end
   return labels
 end
 local function labels_str()
-  local t = tab_labels()
-  local out = {}
-  for i = 1, #t do out[i] = t[i] end
-  return table.concat(out, '|')
+  return table.concat(winbar_labels(), '|')
 end
 local function win_count()
   return #vim.api.nvim_list_wins()
@@ -70,7 +70,8 @@ view.open_with_root(main, 'callout', 'utf-16', { name = 'fake' })
 vim.wait(500, function() return false end)
 check('tab1: callout main', labels_str() == '[' .. 'main' .. arr .. ']', labels_str())
 check('window open', win_count() == 2)
-check('tabline enabled', vim.o.showtabline == 2, tostring(vim.o.showtabline))
+check('winbar set on view window', vim.wo[vim.api.nvim_get_current_win()].winbar ~= '', vim.wo[vim.api.nvim_get_current_win()].winbar)
+check('global tabline untouched', vim.o.tabline == '' or vim.o.tabline == vim.NIL, tostring(vim.o.tabline))
 
 view.open_with_root(l1a, 'callout', 'utf-16', { name = 'fake' })
 vim.wait(500, function() return false end)
@@ -84,26 +85,47 @@ view.open_with_root(main, 'callin', 'utf-16', { name = 'fake' })
 vim.wait(500, function() return false end)
 check('callin is a different tab', labels_str() == 'main' .. arr .. '|' .. 'func_l1_a' .. arr .. '|[' .. arr .. 'main]', labels_str())
 
--- Left click on a tabline label switches to that tab.
-view.on_tab_click(2, 1, 'l')
+-- Pressing <Tab> inside the view must cycle callgraph tabs (the buffer-local
+-- binding overrides global mappings such as barbar's <Tab> -> BufferNext).
+local g_tab = false
+vim.keymap.set('n', '<Tab>', function() g_tab = true end, {})
+vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Tab>', true, false, true), 'x', false)
 vim.wait(200, function() return false end)
-check('tabline click switches tab', labels_str() == 'main' .. arr .. '|[' .. 'func_l1_a' .. arr .. ']|' .. arr .. 'main', labels_str())
+check('Tab key cycles tabs in view', labels_str() == '[' .. 'main' .. arr .. ']|' .. 'func_l1_a' .. arr .. '|' .. arr .. 'main', labels_str())
+check('global Tab mapping not triggered', g_tab == false, tostring(g_tab))
+-- Restore the active tab to callin (tab 3) for the remaining checks.
+view.tab_next()
+vim.wait(200, function() return false end)
+view.tab_next()
+vim.wait(200, function() return false end)
+check('restored active to callin tab', labels_str() == 'main' .. arr .. '|' .. 'func_l1_a' .. arr .. '|[' .. arr .. 'main]', labels_str())
 
-view.on_tab_click(3, 1, 'l')
+-- <S-Tab> from the last tab goes back to tab 2.
+view.tab_prev()
 vim.wait(200, function() return false end)
-check('tabline click back to callin', labels_str() == 'main' .. arr .. '|' .. 'func_l1_a' .. arr .. '|[' .. arr .. 'main]', labels_str())
+check('tab_prev switches tab', labels_str() == 'main' .. arr .. '|[' .. 'func_l1_a' .. arr .. ']|' .. arr .. 'main', labels_str())
+
+-- <Tab> moves forward again to the callin tab.
+view.tab_next()
+vim.wait(200, function() return false end)
+check('tab_next switches tab', labels_str() == 'main' .. arr .. '|' .. 'func_l1_a' .. arr .. '|[' .. arr .. 'main]', labels_str())
 
 view.close_tab()
 vim.wait(200, function() return false end)
--- The previous active tab was func_l1_a (we clicked it above), so closing
--- callin-main returns there.
+-- The previous active tab was func_l1_a, so closing callin-main returns there.
 check('close active tab (callin main)', labels_str() == 'main' .. arr .. '|[' .. 'func_l1_a' .. arr .. ']', labels_str())
 
--- Middle click closes the tab under the pointer.
-view.on_tab_click(1, 1, 'm')
+-- <Tab> wraps from tab 2 back to tab 1.
+view.tab_next()
 vim.wait(200, function() return false end)
-check('middle click closes tab1', labels_str() == '[' .. 'func_l1_a' .. arr .. ']', labels_str())
+check('tab_next wraps to tab1', labels_str() == '[' .. 'main' .. arr .. ']|' .. 'func_l1_a' .. arr, labels_str())
 
+view.tab_prev()
+vim.wait(200, function() return false end)
+check('tab_prev back to func_l1_a', labels_str() == 'main' .. arr .. '|[' .. 'func_l1_a' .. arr .. ']', labels_str())
+
+view.close_tab()
+vim.wait(200, function() return false end)
 view.close_tab()
 vim.wait(200, function() return false end)
 check('last tab closed -> window closed', win_count() == 1)
