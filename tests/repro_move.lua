@@ -50,13 +50,14 @@ end
 
 -- Expected cursor (row = text row, col = text start) per box after each move,
 -- plus the character that must be under the cursor.
--- The tab bar occupies row 1, so graph text rows start at 3.
--- main box col 3, l1a col 24, l2a col 50, l2c col 76 (all text row = 3).
+-- The tab bar now lives on the native 'tabline', not in the buffer, so the
+-- canvas starts at row 1 and all graph text rows are 2.
+-- main box col 3, l1a col 24, l2a col 50, l2c col 76 (all text row = 2).
 local expected = {
-  { 3, 3, 'm' }, -- main
-  { 3, 24, 'f' }, -- func_l1_a
-  { 3, 50, 'f' }, -- func_l2_a
-  { 3, 76, 'f' }, -- func_l2_c
+  { 2, 3, 'm' }, -- main
+  { 2, 24, 'f' }, -- func_l1_a
+  { 2, 50, 'f' }, -- func_l2_a
+  { 2, 76, 'f' }, -- func_l2_c
 }
 
 local win = vim.api.nvim_get_current_win()

@@ -53,6 +53,42 @@ local function set_active(i)
   end
 end
 
+-- ---------------------------------------------------------------------------
+-- Tab bar on the native 'tabline'
+-- ---------------------------------------------------------------------------
+
+-- Render the logical tabs onto vim.o.tabline (the native tab bar, same place
+-- bufferline/barbar render). Each label is a click target "%N@func@label%X":
+-- clicking runs func(N, clicks, button, mods) — N is that tab's index.
+local function update_tabline()
+  if not state then return end
+  local opts = config.get()
+  local hl_active = opts.highlights.tab_active
+  local hl_inactive = opts.highlights.tab_inactive
+  local parts = {}
+  for i, t in ipairs(state.tabs) do
+    local label = (i == state.active) and ('[' .. t.key .. ']') or t.key
+    local hl = (i == state.active) and hl_active or hl_inactive
+    local click = '%' .. i .. '@v:lua.require("callgraph.view").on_tab_click@'
+    parts[#parts + 1] = click .. '%#' .. hl .. '#' .. label .. '%*%X'
+  end
+  vim.o.tabline = '%#TabLineFill#' .. table.concat(parts, ' ')
+end
+
+-- Take over the tabline while the callgraph window is focused. BufEnter on the
+-- callgraph buffer re-runs this so plugins that own 'tabline' (e.g. barbar)
+-- don't clobber our labels while we're inside the view.
+local function takeover_tabline()
+  vim.o.showtabline = 2
+  update_tabline()
+end
+
+local function restore_tabline()
+  if not state then return end
+  vim.o.tabline = state.orig_tabline or ''
+  vim.o.showtabline = state.orig_showtabline or 0
+end
+
 function M.open_with_root(root, direction, encoding, client)
   local opts = config.get()
   local win = vim.api.nvim_get_current_win()
@@ -73,11 +109,13 @@ function M.open_with_root(root, direction, encoding, client)
       tabs = {},
       active = 0,
       prev_active = nil, -- tab active before the current one
-      row_offset = 1, -- tab bar line(s) prepended to the canvas
       last_w = nil,
       keyed = false,
+      orig_tabline = vim.o.tabline, -- restore on close (coexists with barbar etc.)
+      orig_showtabline = vim.o.showtabline,
     }
     M.open_float()
+    takeover_tabline()
   else
     if state.win ~= win then
       state.orig_win = win
@@ -127,30 +165,6 @@ end
 -- Tab bar
 -- ---------------------------------------------------------------------------
 
---- Build the tab bar line and per-tab char ranges (0-based cols).
-local function tab_bar_info(opts)
-  local parts = {}
-  local ranges = {}
-  local col = 0
-  for i, t in ipairs(state.tabs) do
-    local text = (i == state.active) and ('[' .. t.key .. ']') or t.key
-    local nchars = vim.fn.strchars(text)
-    ranges[i] = { start = col, finish = col + nchars }
-    col = col + nchars + 3 -- label + separator
-    parts[#parts + 1] = text
-  end
-  return { line = table.concat(parts, '   '), ranges = ranges }
-end
-
---- Which tab contains the given 0-based char column on the tab bar row.
-local function tab_at_col(char_col)
-  local info = tab_bar_info(config.get())
-  for i, r in ipairs(info.ranges) do
-    if char_col >= r.start and char_col < r.finish then return i end
-  end
-  return nil
-end
-
 local function active_tab()
   if not state then return nil end
   return state.tabs[state.active]
@@ -184,25 +198,14 @@ function M.render_view()
   })
   tab.last_layout = layout
 
-  -- Tab bar (first line) + graph below it.
-  local info = tab_bar_info(opts)
-  local tab_lines = { info.line }
-  local active_range = nil
-  if opts.highlight and info.ranges[state.active] then
-    local r = info.ranges[state.active]
-    active_range = { util.char_to_byte(info.line, r.start), util.char_to_byte(info.line, r.finish) }
-  end
-  state.row_offset = #tab_lines
-
   M.resize_window(opts)
   render_mod.render(state.buf, layout, tab.graph, {
     selected_id = tab.selected_id,
     highlight = opts.highlight,
     highlights = opts.highlights,
     arrows = opts.window.arrows,
-    tab_lines = tab_lines,
-    tab_active_range = active_range,
   })
+  update_tabline()
   M.focus_selected()
 end
 
@@ -234,19 +237,30 @@ function M.focus_selected()
   if not mark_id then return end
   -- The selected box's text start comes from its anchor extmark (source of
   -- truth), so the cursor always lands on the same character the highlight
-  -- covers. The anchor is placed at the graph row + the tab bar offset.
+  -- covers.
   local pos = vim.api.nvim_buf_get_extmark_by_id(state.buf, render_mod.anchor_ns, mark_id, {})
   if not pos then return end
   -- pos[2] is a BYTE column (nvim_win_set_cursor is byte-based).
   local crow, ccol = pos[1] + 1, pos[2]
-  -- nvim_win_set_cursor already scrolls to make the cursor visible; no `zt`.
   pcall(function()
     vim.api.nvim_win_set_cursor(state.win, { crow, ccol })
+    -- The canvas can be wider than the fixed window: scroll horizontally so
+    -- the focused box's text is always visible. `vim.wo[win].scroll` is the
+    -- window's left-edge character column (0-based).
     local line_text = vim.api.nvim_buf_get_lines(state.buf, crow - 1, crow, false)[1] or ''
     local char_idx = util.byte_to_char(line_text, ccol)
+    local winw = vim.api.nvim_win_get_width(state.win)
+    local cur_scroll = vim.wo[state.win].scroll or 0
+    local target = cur_scroll
+    if char_idx < cur_scroll then
+      target = math.max(0, char_idx - 2)
+    elseif char_idx + 1 > cur_scroll + winw - 1 then
+      target = char_idx + 1 - winw + 2
+    end
+    if target ~= cur_scroll then vim.wo[state.win].scroll = target end
     local char_at = vim.fn.strcharpart(line_text, char_idx, 1)
     debug.log('location', 'focus_selected', 'anchor=(' .. pos[1] .. ',' .. pos[2] .. ')',
-      'cursor=(' .. crow .. ',' .. ccol .. ')', 'char=' .. vim.inspect(char_at))
+      'cursor=(' .. crow .. ',' .. ccol .. ')', 'char=' .. vim.inspect(char_at), 'scroll=' .. target)
   end)
 end
 
@@ -258,9 +272,8 @@ local function box_at(row, col)
   if not state then return nil end
   local tab = active_tab()
   if not tab or not tab.last_layout then return nil end
-  local offset = state.row_offset or 0
   for id, b in pairs(tab.last_layout.boxes) do
-    if row >= b.row + offset and row <= b.row + offset + b.height - 1 and col >= b.col and col <= b.col + b.width - 1 then
+    if row >= b.row and row <= b.row + b.height - 1 and col >= b.col and col <= b.col + b.width - 1 then
       return id
     end
   end
@@ -355,6 +368,7 @@ function M.close()
   if state.win and vim.api.nvim_win_is_valid(state.win) then
     pcall(vim.api.nvim_win_close, state.win, true)
   end
+  restore_tabline()
   state = nil
   if orig and vim.api.nvim_win_is_valid(orig) then
     vim.api.nvim_set_current_win(orig)
@@ -366,13 +380,14 @@ function M.jump_to_def()
   if not tab or not tab.graph then return end
   local node = tab.graph.nodes[tab.selected_id]
   if not node or not node.uri then return end
+  -- Keep the view open; only q/Esc closes it. Focus the main window, jump to
+  -- the definition there, and leave the callgraph window on screen.
   local orig = state.orig_win
-  M.close()
   if orig and vim.api.nvim_win_is_valid(orig) then
     vim.api.nvim_set_current_win(orig)
   end
   if node.range then
-    lsp_mod.jump_to_location(node.uri, node.range, state and state.encoding or 'utf-16')
+    lsp_mod.jump_to_location(node.uri, node.range, state.encoding)
   end
 end
 
@@ -394,17 +409,6 @@ end
 function M.on_mouse(clicks)
   if not state or not state.win or not vim.api.nvim_win_is_valid(state.win) then return end
   local m = vim.fn.getmousepos()
-  local offset = state.row_offset or 0
-  if m.line <= offset then
-    -- click on the tab bar: switch tab
-    local idx = tab_at_col(m.column - 1)
-    if idx then
-      set_active(idx)
-      M.render_view()
-      M.focus_selected()
-    end
-    return
-  end
   local id = box_at(m.line, m.column)
   if id then
     local tab = active_tab()
@@ -432,7 +436,7 @@ function M.show_help()
     '  i / o               callin / callout',
     '  + / -               增加/减少深度',
     '  单击选中 / 双击展开  （鼠标）',
-    '  单击标签栏切换 tab',
+    '  点击顶部标签条切换 tab，中键关闭',
   }, '\n'), vim.log.levels.INFO, { title = 'Callgraph' })
 end
 
@@ -478,6 +482,36 @@ function M.setup_keymaps()
     buffer = buf,
     callback = function() M.hover_echo() end,
   })
+
+  -- Re-take the tabline whenever we enter the view (plugins like barbar reset
+  -- 'tabline' on BufEnter) and hand it back when we leave.
+  vim.api.nvim_create_autocmd('BufEnter', {
+    buffer = buf,
+    callback = function()
+      if state and vim.api.nvim_get_current_buf() == buf then takeover_tabline() end
+    end,
+  })
+  vim.api.nvim_create_autocmd('BufLeave', {
+    buffer = buf,
+    callback = function()
+      if state then restore_tabline() end
+    end,
+  })
+end
+
+--- Click handler for tabline labels ("%N@...@label%X"). N is the tab index;
+--- left click switches to it, middle click closes it.
+function M.on_tab_click(i, _, btn)
+  if not state then return end
+  if i < 1 or i > #state.tabs then return end
+  if btn == 'm' then
+    state.active = i
+    M.close_tab()
+  else
+    set_active(i)
+    M.render_view()
+    M.focus_selected()
+  end
 end
 
 return M

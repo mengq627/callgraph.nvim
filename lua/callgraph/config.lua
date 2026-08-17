@@ -40,6 +40,8 @@ M.defaults = {
   },
   highlights = {
     focus = 'CallgraphFocus', -- selected box text color (used when highlight = true)
+    tab_active = 'CallgraphTabActive', -- current tab label on the tabline
+    tab_inactive = 'CallgraphTabInactive', -- other tab labels on the tabline
   },
   -- All in-view keymaps. Set an entry to '' to disable that binding.
   keymaps = {
@@ -82,11 +84,15 @@ function M.update(opts)
 end
 
 --- Define highlight groups. `default = true` lets a colorscheme override them.
---- No-op when the `highlight` toggle is off (no highlight-related work runs).
+--- The selected-box `focus` group only matters when `highlight` is on; the
+--- tabline groups are always needed (the tab bar renders regardless).
 function M.define_highlights()
-  if not M.get().highlight then return end
   local h = M.get().highlights
-  vim.api.nvim_set_hl(0, h.focus, { default = true, fg = '#98c379', bold = true })
+  if M.get().highlight then
+    vim.api.nvim_set_hl(0, h.focus, { default = true, fg = '#98c379', bold = true })
+  end
+  vim.api.nvim_set_hl(0, h.tab_active, { default = true, fg = '#ffffff', bg = '#444444', bold = true })
+  vim.api.nvim_set_hl(0, h.tab_inactive, { default = true, fg = '#888888' })
 end
 
 return M
