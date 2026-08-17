@@ -1,6 +1,7 @@
--- Real-LSP check for the poorly-ordered tests/test.c: the body-scan fallback
--- must resolve implicitly-declared callees by name-match, reaching func_l2_c
--- (4 levels) even though functions are defined after they are called.
+-- Real-LSP check for tests/test.c with the HEURISTIC fallback explicitly
+-- enabled: the body-scan fallback resolves callees by name-match even when
+-- the LSP server (clangd 17, no outgoingCalls) cannot. The pure-LSP path with
+-- clangd >= 20 is covered separately by tests/integration_lsp.lua.
 -- Run: nvim --headless -u NONE -l tests/integration_testc.lua
 
 local here = debug.getinfo(1, 'S').source:sub(2)
@@ -13,7 +14,7 @@ local config_mod = require('callgraph.config')
 local lsp_mod = require('callgraph.lsp')
 local graph_mod = require('callgraph.graph')
 
-config_mod.set({ show_call_site = true })
+config_mod.set({ show_call_site = true, fallback = true })
 
 vim.cmd('edit ' .. root .. '/tests/test.c')
 vim.lsp.start({

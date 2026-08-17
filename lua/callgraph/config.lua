@@ -12,11 +12,12 @@ M.defaults = {
   -- is colored (default green); borders and lines stay unhighlighted. When
   -- false (default), no highlight code runs at all.
   highlight = true,
-  -- When a server lacks call-hierarchy support (clangd < 20 for outgoingCalls),
-  -- fall back to heuristics: scan the function body and resolve each call token
-  -- (callout), or use references + documentSymbol (callin). Set false to use
-  -- only the standard call hierarchy and error when the server can't provide it.
-  fallback = true,
+  -- Use only the LSP call hierarchy — the language-agnostic, cross-file
+  -- source. Heuristic fallback (body scan / name match) is single-file only
+  -- and cannot resolve cross-file calls, so it is opt-in via `fallback = true`.
+  -- When a server lacks call-hierarchy support (clangd < 20 for outgoingCalls)
+  -- an actionable error is shown instead of guessing.
+  fallback = false,
   window = {
     -- Right-split maximum width (fraction of the editor), used only when
     -- `fixed_width` is 0.

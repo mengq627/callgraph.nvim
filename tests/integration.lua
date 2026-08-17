@@ -21,7 +21,7 @@ local graph_mod = require('callgraph.graph')
 local layout_mod = require('callgraph.layout')
 local render_mod = require('callgraph.render')
 
-config_mod.set({ show_call_site = true })
+config_mod.set({ show_call_site = true, fallback = true })
 
 vim.cmd('edit ' .. root .. '/tests/clean.c')
 vim.lsp.start({
