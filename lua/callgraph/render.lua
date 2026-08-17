@@ -140,8 +140,13 @@ function M.render(buf, layout, graph, view)
     draw_box(grid, b)
   end
 
+  -- Tab bar lines (prepended above the graph) shift every graph row down.
+  local tab_lines = view.tab_lines or {}
+  local row_offset = #tab_lines
+
   local lines = {}
-  for r = 1, H do lines[r] = table.concat(grid[r]) end
+  for _, l in ipairs(tab_lines) do lines[#lines + 1] = l end
+  for r = 1, H do lines[#lines + 1] = table.concat(grid[r]) end
 
   local modifiable = vim.bo[buf].modifiable
   vim.bo[buf].modifiable = true
@@ -154,14 +159,24 @@ function M.render(buf, layout, graph, view)
   vim.api.nvim_buf_clear_namespace(buf, M.ns, 0, -1)
   layout.box_marks = {}
   for id, b in pairs(layout.boxes) do
-    local line_text = lines[b.row + 1] or ''
+    local line_text = lines[b.row + row_offset + 1] or ''
     local byte_col = util.char_to_byte(line_text, b.col)
-    layout.box_marks[id] = vim.api.nvim_buf_set_extmark(buf, M.anchor_ns, b.row, byte_col, {})
+    layout.box_marks[id] = vim.api.nvim_buf_set_extmark(buf, M.anchor_ns, b.row + row_offset, byte_col, {})
   end
 
   -- Highlighting is opt-in and defaults to off. When off, no highlight code
   -- runs at all; the canvas is drawn with the default terminal colors.
   if not view.highlight then return end
+
+  -- Active tab label on the tab bar (first line, row 0).
+  if view.tab_active_range then
+    local c0, c1 = view.tab_active_range[1], view.tab_active_range[2]
+    vim.api.nvim_buf_set_extmark(buf, M.ns, 0, c0, {
+      end_col = c1,
+      hl_group = view.highlights.focus,
+      priority = 4,
+    })
+  end
 
   -- Only the selected box's function name is colored (not the trailing
   -- location label); box borders and connection lines stay unhighlighted.
@@ -171,7 +186,7 @@ function M.render(buf, layout, graph, view)
   if box then
     local pos = vim.api.nvim_buf_get_extmark_by_id(buf, M.anchor_ns, layout.box_marks[view.selected_id], {})
     if pos then
-      local line_text = lines[box.row + 1] or ''
+      local line_text = lines[pos[1] + 1] or ''
       local end_byte = util.char_to_byte(line_text, box.col + box.name_width)
       vim.api.nvim_buf_set_extmark(buf, M.ns, pos[1], pos[2], {
         end_col = end_byte,

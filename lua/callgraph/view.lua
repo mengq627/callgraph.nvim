@@ -1,6 +1,7 @@
---- The callgraph floating view: single reusable window, fit-to-content
---- sizing, buffer-local keymaps, mouse interaction, hover echo, and the async
---- glue between LSP data and the layout/render core.
+--- The callgraph view: a right-side split window hosting multiple independent
+--- tabs (one per function + direction), a tab bar, fixed-width sizing,
+--- buffer-local keymaps, mouse interaction, hover echo, and the async glue
+--- between LSP data and the layout/render core.
 
 local config = require('callgraph.config')
 local debug = require('callgraph.debug')
@@ -36,9 +37,26 @@ function M.open(direction)
   end)
 end
 
+--- Tab identity: arrow before the name = callin, after = callout.
+local function tab_key(name, direction, arrows)
+  if direction == 'callin' then return arrows.right .. name end
+  return name .. arrows.right
+end
+
+-- Switch the active tab, remembering the previous one so closing a tab can
+-- return to wherever the user was before (temporarily flipping direction with
+-- i/o and closing lands back on the originating tab).
+local function set_active(i)
+  if i ~= state.active then
+    state.prev_active = state.active
+    state.active = i
+  end
+end
+
 function M.open_with_root(root, direction, encoding, client)
   local opts = config.get()
   local win = vim.api.nvim_get_current_win()
+  local key = tab_key(root.name, direction, opts.window.arrows)
 
   if not state or not (state.win and vim.api.nvim_win_is_valid(state.win)) then
     local buf = vim.api.nvim_create_buf(false, true)
@@ -50,30 +68,44 @@ function M.open_with_root(root, direction, encoding, client)
       buf = buf,
       win = nil,
       orig_win = win,
-      root = root,
-      direction = direction,
       encoding = encoding,
       client = client,
-      view_depth = opts.max_depth,
-      graph = nil,
-      selected_id = nil,
-      last_layout = nil,
+      tabs = {},
+      active = 0,
+      prev_active = nil, -- tab active before the current one
+      row_offset = 1, -- tab bar line(s) prepended to the canvas
       last_w = nil,
-      last_h = nil,
       keyed = false,
     }
     M.open_float()
   else
-    if state.win == win then
-      -- Float is focused (command run from inside the view): keep orig_win.
-    else
+    if state.win ~= win then
       state.orig_win = win
     end
-    state.root = root
-    state.direction = direction
     state.encoding = encoding
     state.client = client
   end
+
+  -- Same function + same direction -> reuse the tab (jump to it).
+  for i, t in ipairs(state.tabs) do
+    if t.key == key then
+      set_active(i)
+      M.render_view()
+      M.focus_selected()
+      return
+    end
+  end
+
+  state.tabs[#state.tabs + 1] = {
+    key = key,
+    root = root,
+    direction = direction,
+    view_depth = opts.max_depth,
+    graph = nil,
+    selected_id = nil,
+    last_layout = nil,
+  }
+  set_active(#state.tabs)
   M.rebuild()
 end
 
@@ -92,15 +124,50 @@ function M.open_float()
 end
 
 -- ---------------------------------------------------------------------------
+-- Tab bar
+-- ---------------------------------------------------------------------------
+
+--- Build the tab bar line and per-tab char ranges (0-based cols).
+local function tab_bar_info(opts)
+  local parts = {}
+  local ranges = {}
+  local col = 0
+  for i, t in ipairs(state.tabs) do
+    local text = (i == state.active) and ('[' .. t.key .. ']') or t.key
+    local nchars = vim.fn.strchars(text)
+    ranges[i] = { start = col, finish = col + nchars }
+    col = col + nchars + 3 -- label + separator
+    parts[#parts + 1] = text
+  end
+  return { line = table.concat(parts, '   '), ranges = ranges }
+end
+
+--- Which tab contains the given 0-based char column on the tab bar row.
+local function tab_at_col(char_col)
+  local info = tab_bar_info(config.get())
+  for i, r in ipairs(info.ranges) do
+    if char_col >= r.start and char_col < r.finish then return i end
+  end
+  return nil
+end
+
+local function active_tab()
+  if not state then return nil end
+  return state.tabs[state.active]
+end
+
+-- ---------------------------------------------------------------------------
 -- Build / render pipeline
 -- ---------------------------------------------------------------------------
 
 function M.rebuild()
+  local tab = active_tab()
+  if not tab then return end
   local fetch = lsp_mod.make_fetch(state.client, state.encoding, config.get())
-  local d = graph_mod.build(state.root, state.direction, { max_depth = state.view_depth }, fetch)
+  local d = graph_mod.build(tab.root, tab.direction, { max_depth = tab.view_depth }, fetch)
   d:next(function(graph)
-    state.graph = graph
-    state.selected_id = graph.root.id
+    tab.graph = graph
+    tab.selected_id = graph.root.id
     M.render_view()
   end, function(err)
     vim.notify('Callgraph: 建图失败: ' .. tostring(err), vim.log.levels.ERROR)
@@ -109,26 +176,48 @@ end
 
 function M.render_view()
   local opts = config.get()
-  local layout = layout_mod.layout(state.graph, opts, {
-    direction = state.direction,
-    selected_id = state.selected_id,
+  local tab = active_tab()
+  if not tab then return end
+  local layout = layout_mod.layout(tab.graph, opts, {
+    direction = tab.direction,
+    selected_id = tab.selected_id,
   })
-  state.last_layout = layout
-  M.resize_window(opts, layout)
-  render_mod.render(state.buf, layout, state.graph, {
-    selected_id = state.selected_id,
+  tab.last_layout = layout
+
+  -- Tab bar (first line) + graph below it.
+  local info = tab_bar_info(opts)
+  local tab_lines = { info.line }
+  local active_range = nil
+  if opts.highlight and info.ranges[state.active] then
+    local r = info.ranges[state.active]
+    active_range = { util.char_to_byte(info.line, r.start), util.char_to_byte(info.line, r.finish) }
+  end
+  state.row_offset = #tab_lines
+
+  M.resize_window(opts)
+  render_mod.render(state.buf, layout, tab.graph, {
+    selected_id = tab.selected_id,
     highlight = opts.highlight,
     highlights = opts.highlights,
     arrows = opts.window.arrows,
+    tab_lines = tab_lines,
+    tab_active_range = active_range,
   })
   M.focus_selected()
 end
 
-function M.resize_window(opts, layout)
-  -- Split window keeps the full editor height; only the width tracks content.
-  local columns = vim.o.columns
-  local mw = math.floor(columns * opts.window.max_width_ratio)
-  local w = math.min(layout.width + 2, mw)
+function M.resize_window(opts)
+  -- Fixed width keeps the split stable across expand/collapse.
+  local fw = opts.window.fixed_width or 0
+  local w
+  if fw > 0 then
+    w = fw
+  else
+    local tab = active_tab()
+    local columns = vim.o.columns
+    local mw = math.floor(columns * opts.window.max_width_ratio)
+    w = math.min((tab and tab.last_layout and tab.last_layout.width or 10) + 2, mw)
+  end
   if w < 3 then w = 3 end
   if state.last_w == w then return end
   state.last_w = w
@@ -137,19 +226,20 @@ end
 
 function M.focus_selected()
   if not state or not state.win or not vim.api.nvim_win_is_valid(state.win) then return end
-  local layout = state.last_layout
+  local tab = active_tab()
+  if not tab then return end
+  local layout = tab.last_layout
   if not layout then return end
-  local mark_id = layout.box_marks and layout.box_marks[state.selected_id]
+  local mark_id = layout.box_marks and layout.box_marks[tab.selected_id]
   if not mark_id then return end
   -- The selected box's text start comes from its anchor extmark (source of
   -- truth), so the cursor always lands on the same character the highlight
-  -- covers. box.col - 1 used to land on the box's left border instead.
+  -- covers. The anchor is placed at the graph row + the tab bar offset.
   local pos = vim.api.nvim_buf_get_extmark_by_id(state.buf, render_mod.anchor_ns, mark_id, {})
   if not pos then return end
   -- pos[2] is a BYTE column (nvim_win_set_cursor is byte-based).
   local crow, ccol = pos[1] + 1, pos[2]
-  -- nvim_win_set_cursor already scrolls to make the cursor visible; no `zt`
-  -- (it shifted the column).
+  -- nvim_win_set_cursor already scrolls to make the cursor visible; no `zt`.
   pcall(function()
     vim.api.nvim_win_set_cursor(state.win, { crow, ccol })
     local line_text = vim.api.nvim_buf_get_lines(state.buf, crow - 1, crow, false)[1] or ''
@@ -165,9 +255,12 @@ end
 -- ---------------------------------------------------------------------------
 
 local function box_at(row, col)
-  if not state or not state.last_layout then return nil end
-  for id, b in pairs(state.last_layout.boxes) do
-    if row >= b.row and row <= b.row + b.height - 1 and col >= b.col and col <= b.col + b.width - 1 then
+  if not state then return nil end
+  local tab = active_tab()
+  if not tab or not tab.last_layout then return nil end
+  local offset = state.row_offset or 0
+  for id, b in pairs(tab.last_layout.boxes) do
+    if row >= b.row + offset and row <= b.row + offset + b.height - 1 and col >= b.col and col <= b.col + b.width - 1 then
       return id
     end
   end
@@ -175,8 +268,9 @@ local function box_at(row, col)
 end
 
 function M.move(dir)
-  if not state or not state.last_layout then return end
-  local focus = state.last_layout.boxes[state.selected_id]
+  local tab = active_tab()
+  if not tab or not tab.last_layout then return end
+  local focus = tab.last_layout.boxes[tab.selected_id]
   if not focus then return end
   local fc = focus.col + focus.width / 2
   local fr = focus.row + 1
@@ -185,8 +279,8 @@ function M.move(dir)
   if not d then return end
   local dx, dy = d[1], d[2]
   local best, best_score
-  for id, b in pairs(state.last_layout.boxes) do
-    if id ~= state.selected_id then
+  for id, b in pairs(tab.last_layout.boxes) do
+    if id ~= tab.selected_id then
       local bc = b.col + b.width / 2
       local br = b.row + 1
       local dc, dr = bc - fc, br - fr
@@ -199,19 +293,20 @@ function M.move(dir)
     end
   end
   if best then
-    state.selected_id = best
+    tab.selected_id = best
     M.render_view()
   end
 end
 
 function M.toggle_expand()
-  if not state or not state.graph then return end
-  local node = state.graph.nodes[state.selected_id]
+  local tab = active_tab()
+  if not tab or not tab.graph then return end
+  local node = tab.graph.nodes[tab.selected_id]
   if not node then return end
   local fetch = lsp_mod.make_fetch(state.client, state.encoding, config.get())
-  local d = graph_mod.expand(state.graph, node, fetch)
+  local d = graph_mod.expand(tab.graph, node, fetch)
   d:next(function(g)
-    state.graph = g
+    tab.graph = g
     M.render_view()
   end, function(err)
     vim.notify('Callgraph: 展开失败: ' .. tostring(err), vim.log.levels.ERROR)
@@ -219,15 +314,39 @@ function M.toggle_expand()
 end
 
 function M.change_depth(delta)
-  if not state then return end
-  state.view_depth = math.max(1, state.view_depth + delta)
+  local tab = active_tab()
+  if not tab then return end
+  tab.view_depth = math.max(1, tab.view_depth + delta)
   M.rebuild()
 end
 
+--- Switch to the other direction for the current root (a different tab).
 function M.set_direction(dir)
-  if not state or state.direction == dir then return end
-  state.direction = dir
-  M.rebuild()
+  local tab = active_tab()
+  if not tab or tab.direction == dir then return end
+  M.open_with_root(tab.root, dir, state.encoding, state.client)
+end
+
+--- Close the active tab; when the last tab closes, close the window.
+function M.close_tab()
+  if not state then return end
+  if #state.tabs <= 1 then
+    M.close()
+    return
+  end
+  table.remove(state.tabs, state.active)
+  -- Return to the tab that was active before this one (e.g. closing a
+  -- direction-flip tab lands back where the user came from). Fall back to the
+  -- adjacent tab when there's no recorded previous one or it was removed.
+  local target = state.prev_active
+  state.prev_active = nil
+  if target and target >= 1 and target <= #state.tabs then
+    state.active = target
+  elseif state.active > #state.tabs then
+    state.active = #state.tabs
+  end
+  M.render_view()
+  M.focus_selected()
 end
 
 function M.close()
@@ -243,8 +362,9 @@ function M.close()
 end
 
 function M.jump_to_def()
-  if not state or not state.graph then return end
-  local node = state.graph.nodes[state.selected_id]
+  local tab = active_tab()
+  if not tab or not tab.graph then return end
+  local node = tab.graph.nodes[tab.selected_id]
   if not node or not node.uri then return end
   local orig = state.orig_win
   M.close()
@@ -252,16 +372,17 @@ function M.jump_to_def()
     vim.api.nvim_set_current_win(orig)
   end
   if node.range then
-    lsp_mod.jump_to_location(node.uri, node.range, state.encoding or 'utf-16')
+    lsp_mod.jump_to_location(node.uri, node.range, state and state.encoding or 'utf-16')
   end
 end
 
 function M.hover_echo()
   if not state or not state.win or not vim.api.nvim_win_is_valid(state.win) then return end
   local pos = vim.api.nvim_win_get_cursor(state.win)
+  local tab = active_tab()
   local id = box_at(pos[1], pos[2] + 1)
-  if id and state.graph then
-    local node = state.graph.nodes[id]
+  if id and tab and tab.graph then
+    local node = tab.graph.nodes[id]
     if node then
       local path = vim.uri_to_fname(node.uri or '')
       local line = (node.range and node.range.start and node.range.start.line or 0) + 1
@@ -273,9 +394,21 @@ end
 function M.on_mouse(clicks)
   if not state or not state.win or not vim.api.nvim_win_is_valid(state.win) then return end
   local m = vim.fn.getmousepos()
+  local offset = state.row_offset or 0
+  if m.line <= offset then
+    -- click on the tab bar: switch tab
+    local idx = tab_at_col(m.column - 1)
+    if idx then
+      set_active(idx)
+      M.render_view()
+      M.focus_selected()
+    end
+    return
+  end
   local id = box_at(m.line, m.column)
   if id then
-    state.selected_id = id
+    local tab = active_tab()
+    tab.selected_id = id
     M.render_view()
     if clicks >= 2 then M.toggle_expand() end
   end
@@ -292,13 +425,14 @@ function M.show_help()
   vim.notify(table.concat({
     'Callgraph 快捷键',
     '  h/j/k/l / 方向键   移动选中框',
-    '  Enter               展开/折叠',
-    '  q / Esc             关闭',
+    '  空格                展开/折叠',
+    '  Enter / d           跳转到定义',
+    '  q / Esc             关闭当前 tab',
     '  r                   刷新',
     '  i / o               callin / callout',
     '  + / -               增加/减少深度',
-    '  d                   跳转到定义',
     '  单击选中 / 双击展开  （鼠标）',
+    '  单击标签栏切换 tab',
   }, '\n'), vim.log.levels.INFO, { title = 'Callgraph' })
 end
 
@@ -324,14 +458,15 @@ function M.setup_keymaps()
   set(km.move_up_alt, function() M.move('up') end)
   set(km.move_right_alt, function() M.move('right') end)
   set(km.toggle_expand, function() M.toggle_expand() end)
-  set(km.close, function() M.close() end)
-  set(km.close_alt, function() M.close() end)
+  set(km.close, function() M.close_tab() end)
+  set(km.close_alt, function() M.close_tab() end)
   set(km.refresh, function() M.rebuild() end)
   set(km.to_callin, function() M.set_direction('callin') end)
   set(km.to_callout, function() M.set_direction('callout') end)
   set(km.depth_up, function() M.change_depth(1) end)
   set(km.depth_down, function() M.change_depth(-1) end)
   set(km.jump_to_def, function() M.jump_to_def() end)
+  set(km.jump_to_def_alt, function() M.jump_to_def() end)
   set(km.help, function() M.show_help() end)
 
   vim.keymap.set('n', '<LeftMouse>', function() M.on_mouse(1) end, opts)

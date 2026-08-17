@@ -132,7 +132,7 @@ render_mod.render(buf, lay, g, { selected_id = nid(main), highlights = config.ge
 local text = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n')
 check('name main rendered', text:find('main') ~= nil)
 check('box border rendered', text:find('─') ~= nil)
-check('arrow rendered', text:find('>') ~= nil)
+check('arrow rendered', text:find('') ~= nil)
 
 local lay2 = layout_mod.layout(g2, opts, { direction = 'callout', selected_id = nid(X) })
 render_mod.render(buf, lay2, g2, { selected_id = nid(X), highlights = config.get().highlights })
@@ -231,10 +231,10 @@ local gsc = graph_mod.build(main2, 'callout', { max_depth = 4 }, make_fetch(sc_c
 local laysc = layout_mod.layout(gsc, opts, { direction = 'callout', selected_id = nid(main2) })
 render_mod.render(buf, laysc, gsc, { selected_id = nid(main2), highlights = config.get().highlights })
 local txt3 = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n')
-check('same-column edge drawn with vertical arrow', txt3:find('[v^]') ~= nil)
+check('same-column edge drawn with vertical arrow', txt3:find('[▼▲]') ~= nil)
 check('same-column edge connects A->B', (function()
   for _, e in ipairs(laysc.edges) do
-    if e.arrow and e.arrow.ch and (e.arrow.ch == 'v' or e.arrow.ch == '^') then return true end
+    if e.arrow and (e.arrow.dir == 'd' or e.arrow.dir == 'u') then return true end
   end
   return false
 end)())

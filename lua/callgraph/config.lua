@@ -18,8 +18,12 @@ M.defaults = {
   -- only the standard call hierarchy and error when the server can't provide it.
   fallback = true,
   window = {
-    -- Right-split maximum width (fraction of the editor).
+    -- Right-split maximum width (fraction of the editor), used only when
+    -- `fixed_width` is 0.
     max_width_ratio = 0.8,
+    -- Fixed window width in columns (0 = fit to content). A fixed width keeps
+    -- the split stable when graphs expand/collapse.
+    fixed_width = 80,
     -- Vertical gap between stacked boxes within a column.
     row_gap = 2,
     -- Horizontal gap between columns.
@@ -47,15 +51,16 @@ M.defaults = {
     move_down_alt = '<Down>',
     move_up_alt = '<Up>',
     move_right_alt = '<Right>',
-    toggle_expand = '<CR>',
-    close = 'q',
+    toggle_expand = '<Space>',
+    close = 'q', -- 关闭当前 tab（最后一个 tab 关闭时关闭窗口）
     close_alt = '<Esc>',
     refresh = 'r',
     to_callin = 'i',
     to_callout = 'o',
     depth_up = '+',
     depth_down = '-',
-    jump_to_def = 'd',
+    jump_to_def = '<CR>', -- 跳转到主界面中的函数定义
+    jump_to_def_alt = 'd',
     help = '?',
   },
 }
