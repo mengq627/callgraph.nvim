@@ -53,6 +53,16 @@ local function set_active(i)
   end
 end
 
+-- Make the callgraph window the current one. The very first open focuses it
+-- via open_float; every later open/reuse must switch focus here so calling
+-- :Callout/:Callin from the editor lands in the graph window.
+local function focus_view()
+  if not state or not state.win or not vim.api.nvim_win_is_valid(state.win) then return end
+  if vim.api.nvim_get_current_win() ~= state.win then
+    vim.api.nvim_set_current_win(state.win)
+  end
+end
+
 -- ---------------------------------------------------------------------------
 -- Tab bar on the window's winbar
 -- ---------------------------------------------------------------------------
@@ -114,6 +124,7 @@ function M.open_with_root(root, direction, encoding, client)
       set_active(i)
       M.render_view()
       M.focus_selected()
+      focus_view()
       return
     end
   end
@@ -128,6 +139,7 @@ function M.open_with_root(root, direction, encoding, client)
     last_layout = nil,
   }
   set_active(#state.tabs)
+  focus_view()
   M.rebuild()
 end
 

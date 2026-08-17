@@ -73,12 +73,18 @@ check('window open', win_count() == 2)
 check('winbar set on view window', vim.wo[vim.api.nvim_get_current_win()].winbar ~= '', vim.wo[vim.api.nvim_get_current_win()].winbar)
 check('global tabline untouched', vim.o.tabline == '' or vim.o.tabline == vim.NIL, tostring(vim.o.tabline))
 
+-- Trigger the second :Callout from the editor window (as a real user does):
+-- the view must re-focus even though the window already exists.
+vim.api.nvim_set_current_win(orig_win)
 view.open_with_root(l1a, 'callout', 'utf-16', { name = 'fake' })
 vim.wait(500, function() return false end)
+check('focus returns to view for new tab', vim.api.nvim_get_current_win() ~= orig_win, 'cur=' .. vim.api.nvim_get_current_win())
 check('tab2: new tab added', labels_str() == 'main' .. arr .. '|[' .. 'func_l1_a' .. arr .. ']', labels_str())
 
+vim.api.nvim_set_current_win(orig_win)
 view.open_with_root(main, 'callout', 'utf-16', { name = 'fake' })
 vim.wait(500, function() return false end)
+check('focus returns to view for reused tab', vim.api.nvim_get_current_win() ~= orig_win, 'cur=' .. vim.api.nvim_get_current_win())
 check('reopen main -> jump to tab1', labels_str() == '[' .. 'main' .. arr .. ']|' .. 'func_l1_a' .. arr, labels_str())
 
 view.open_with_root(main, 'callin', 'utf-16', { name = 'fake' })
