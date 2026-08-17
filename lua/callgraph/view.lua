@@ -244,10 +244,11 @@ function M.focus_selected()
     vim.api.nvim_win_call(state.win, function()
       vim.cmd('normal! zz')
     end)
-    -- Keep the focused box fully visible and roughly centered. The canvas can
-    -- be wider than the fixed window, so scroll horizontally. `vim.wo.scroll`
-    -- does NOT control horizontal scroll; the window's left edge is
-    -- winsaveview().leftcol (a character column), set via winrestview().
+    -- Keep the focused box fully visible with a small margin, scrolling as
+    -- little as possible (a full centering scrolls too far and makes the
+    -- cursor's on-screen position jump backwards). `vim.wo.scroll` does NOT
+    -- control horizontal scroll; the window's left edge is winsaveview().leftcol
+    -- (a character column), set via winrestview().
     local box = layout.boxes[tab.selected_id]
     local line_text = vim.api.nvim_buf_get_lines(state.buf, crow - 1, crow, false)[1] or ''
     local char_idx = util.byte_to_char(line_text, ccol)
@@ -259,9 +260,16 @@ function M.focus_selected()
       end)
       local cur_left = view.leftcol or 0
       local target = cur_left
-      if char_idx < cur_left or char_idx + bw - 1 > cur_left + winw - 3 then
-        -- Box clipped by the window edge -> center it.
-        target = math.max(0, math.floor(char_idx + bw / 2 - winw / 2))
+      local margin = 2
+      -- Box left edge = text start - 1 (the box border), box right edge =
+      -- text start + box width - 2 (also the border). Scroll just enough to
+      -- keep the whole box + margin visible.
+      local box_left = char_idx - 1 - margin
+      local box_right = char_idx + bw - 2 + margin
+      if box_left < cur_left then
+        target = math.max(0, box_left)
+      elseif box_right > cur_left + winw - 1 then
+        target = math.max(0, box_right - winw + 1)
       end
       if target ~= cur_left then
         view.leftcol = target

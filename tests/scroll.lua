@@ -60,6 +60,14 @@ local function visible_ok()
   local ww = vim.api.nvim_win_get_width(win)
   return ci >= sc and ci < sc + ww
 end
+-- Columns of empty space between the cursor and the window's right/left edge.
+-- A fully-visible box keeps >= margin columns on its trailing side.
+local function right_margin()
+  return leftcol() + vim.api.nvim_win_get_width(win) - 1 - char_col()
+end
+local function left_margin()
+  return char_col() - leftcol()
+end
 
 local failed = 0
 local function check(name, cond, detail)
@@ -74,9 +82,10 @@ view.move('right'); vim.wait(200, function() return false end)
 local sc1 = leftcol()
 check('scrolled right to reach l2c', sc1 > 0, 'leftcol=' .. sc1)
 check('cursor visible after moving right', visible_ok(), 'char=' .. char_col() .. ' leftcol=' .. sc1)
--- The box is centered, so the cursor is not hugging the window edge.
-check('right box centered (not hugging edge)', char_col() - sc1 < vim.api.nvim_win_get_width(win) / 2,
-  'char=' .. char_col() .. ' leftcol=' .. sc1)
+-- Minimal scroll: the box stays toward the right, not dragged to center, and
+-- its right edge keeps a margin so it is not clipped.
+check('right box keeps margin from right edge', right_margin() >= 2,
+  'char=' .. char_col() .. ' leftcol=' .. sc1 .. ' right_margin=' .. right_margin())
 
 view.move('left'); vim.wait(200, function() return false end)
 view.move('left'); vim.wait(200, function() return false end)
@@ -84,8 +93,9 @@ view.move('left'); vim.wait(200, function() return false end)
 local sc2 = leftcol()
 check('scrolled back left to main', sc2 < sc1, 'leftcol=' .. sc2)
 check('cursor visible after moving left', visible_ok(), 'char=' .. char_col() .. ' leftcol=' .. sc2)
-check('left box centered (not hugging edge)', char_col() - sc2 < vim.api.nvim_win_get_width(win) / 2,
-  'char=' .. char_col() .. ' leftcol=' .. sc2)
+-- Coming back left, the leftmost box's border must not be clipped either.
+check('left box border not clipped', left_margin() >= 2,
+  'char=' .. char_col() .. ' leftcol=' .. sc2 .. ' left_margin=' .. left_margin())
 
 view.close()
 print('---')
