@@ -56,7 +56,7 @@
 ```lua
 -- lazy.nvim
 {
-  '你的用户/callgraph.nvim',
+  'mengq627/callgraph.nvim',
   cmd = { 'Callout', 'Callin' },
   keys = {
     { '<leader>co', '<cmd>Callout<CR>', desc = 'Call graph: callees' },
