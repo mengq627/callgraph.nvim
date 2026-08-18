@@ -165,21 +165,35 @@ function M.render(buf, layout, graph, view)
   -- runs at all; the canvas is drawn with the default terminal colors.
   if not view.highlight then return end
 
-  -- Only the selected box's function name is colored (not the trailing
-  -- location label); box borders and connection lines stay unhighlighted.
-  -- Position is taken from the anchor (byte col) so it always matches where
-  -- the cursor lands; end is the byte col of (name_start + name_width chars).
-  local box = layout.boxes[view.selected_id]
-  if box then
-    local pos = vim.api.nvim_buf_get_extmark_by_id(buf, M.anchor_ns, layout.box_marks[view.selected_id], {})
-    if pos then
-      local line_text = lines[pos[1] + 1] or ''
-      local end_byte = util.char_to_byte(line_text, box.col + box.name_width)
-      vim.api.nvim_buf_set_extmark(buf, M.ns, pos[1], pos[2], {
-        end_col = end_byte,
-        hl_group = view.highlights.focus,
-        priority = 3,
-      })
+  local hl = view.highlights
+
+  for id, b in pairs(layout.boxes) do
+    local mark_id = layout.box_marks[id]
+    if mark_id then
+      local pos = vim.api.nvim_buf_get_extmark_by_id(buf, M.anchor_ns, mark_id, {})
+      if pos then
+        local line_text = lines[pos[1] + 1] or ''
+        local name_end = util.char_to_byte(line_text, b.col + b.name_width)
+        local loc_end = util.char_to_byte(line_text, b.col + b.width - 2)
+
+        -- Dim the location label (after name, before right │).
+        if loc_end > name_end then
+          vim.api.nvim_buf_set_extmark(buf, M.ns, pos[1], name_end, {
+            end_col = loc_end,
+            hl_group = hl.loc,
+            priority = 2,
+          })
+        end
+
+        -- Selected box: brighten the function name on top.
+        if id == view.selected_id then
+          vim.api.nvim_buf_set_extmark(buf, M.ns, pos[1], pos[2], {
+            end_col = name_end,
+            hl_group = hl.focus,
+            priority = 3,
+          })
+        end
+      end
     end
   end
 end
