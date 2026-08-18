@@ -225,11 +225,14 @@ function M.resize_window(opts)
     else
       local tab = active_tab()
       local columns = vim.o.columns
+      local mw = math.floor(columns * opts.window.max_width_ratio)
+      w = math.min((tab and tab.last_layout and tab.last_layout.width or 10) + 2, mw)
+    end
+    if w < 3 then w = 3 end
+    if state.last_w == w then return end
+    state.last_w = w
+    vim.api.nvim_win_set_width(state.win, w)
   end
-  if w < 3 then w = 3 end
-  if state.last_w == w then return end
-  state.last_w = w
-  vim.api.nvim_win_set_width(state.win, w)
 end
 
 function M.focus_selected()
