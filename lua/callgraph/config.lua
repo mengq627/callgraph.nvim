@@ -19,12 +19,18 @@ M.defaults = {
   -- an actionable error is shown instead of guessing.
   fallback = false,
   window = {
+    -- Split position: "right" (vertical split) or "bottom" (horizontal split).
+    position = 'bottom',
+
     -- Right-split maximum width (fraction of the editor), used only when
     -- `fixed_width` is 0.
     max_width_ratio = 0.8,
-    -- Fixed window width in columns (0 = fit to content). A fixed width keeps
-    -- the split stable when graphs expand/collapse.
+
+    -- Fixed window size (0 = fit to content). "right" uses fixed_width in
+    -- columns; "bottom" uses fixed_height in rows.
     fixed_width = 80,
+    fixed_height = 20,
+
     -- Vertical gap between stacked boxes within a column.
     row_gap = 2,
     -- Horizontal gap between columns.

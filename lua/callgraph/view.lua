@@ -144,9 +144,11 @@ function M.open_with_root(root, direction, encoding, client)
 end
 
 function M.open_float()
-  -- Right-side split window (not a float).
+  -- Right-side or bottom-side split window (not a float).
+  local pos = config.get().window.position
+  local split = (pos == 'bottom') and 'below' or 'right'
   local win = vim.api.nvim_open_win(state.buf, true, {
-    split = 'right',
+    split = split,
   })
   state.win = win
   local wo = vim.wo[win]
@@ -206,16 +208,23 @@ function M.render_view()
 end
 
 function M.resize_window(opts)
-  -- Fixed width keeps the split stable across expand/collapse.
-  local fw = opts.window.fixed_width or 0
-  local w
-  if fw > 0 then
-    w = fw
+  local pos = opts.window.position
+  if pos == 'bottom' then
+    local fh = opts.window.fixed_height or 0
+    local h = fh > 0 and fh or 20
+    if h < 3 then h = 3 end
+    if state.last_w ~= h then
+      state.last_w = h
+      vim.api.nvim_win_set_height(state.win, h)
+    end
   else
-    local tab = active_tab()
-    local columns = vim.o.columns
-    local mw = math.floor(columns * opts.window.max_width_ratio)
-    w = math.min((tab and tab.last_layout and tab.last_layout.width or 10) + 2, mw)
+    local fw = opts.window.fixed_width or 0
+    local w
+    if fw > 0 then
+      w = fw
+    else
+      local tab = active_tab()
+      local columns = vim.o.columns
   end
   if w < 3 then w = 3 end
   if state.last_w == w then return end
