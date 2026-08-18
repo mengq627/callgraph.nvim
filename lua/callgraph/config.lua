@@ -47,6 +47,7 @@ M.defaults = {
   },
   highlights = {
     focus = 'CallgraphFocus', -- selected box text color (used when highlight = true)
+    loc = 'CallgraphLoc',     -- file:line label (dimmer)
     tab_active = 'CallgraphTabActive', -- current tab label on the tabline
     tab_inactive = 'CallgraphTabInactive', -- other tab labels on the tabline
   },
@@ -99,6 +100,7 @@ function M.define_highlights()
   local h = M.get().highlights
   if M.get().highlight then
     vim.api.nvim_set_hl(0, h.focus, { default = true, fg = '#98c379', bold = true })
+    vim.api.nvim_set_hl(0, h.loc, { default = true, fg = '#5c6370' })
   end
   vim.api.nvim_set_hl(0, h.tab_active, { default = true, fg = '#ffffff', bg = '#444444', bold = true })
   vim.api.nvim_set_hl(0, h.tab_inactive, { default = true, fg = '#888888' })
