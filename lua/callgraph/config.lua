@@ -47,6 +47,10 @@ M.defaults = {
   },
   highlights = {
     focus = 'CallgraphFocus', -- selected box text color (used when highlight = true)
+    -- Bold the focused function name. Default off: bold causes the text to
+    -- look thicker/sharper as the selection moves, which reads as a font
+    -- size jump. Turn on for a stronger selection cue.
+    focus_bold = false,
     loc = 'CallgraphLoc',     -- file:line label (dimmer)
     tab_active = 'CallgraphTabActive', -- current tab label on the tabline
     tab_inactive = 'CallgraphTabInactive', -- other tab labels on the tabline
@@ -99,8 +103,12 @@ end
 function M.define_highlights()
   local h = M.get().highlights
   if M.get().highlight then
-    vim.api.nvim_set_hl(0, h.focus, { default = true, fg = '#98c379', bold = true })
-    vim.api.nvim_set_hl(0, h.loc, { default = true, fg = '#5c6370' })
+    -- The focus group is always applied (no `default = true`, which would skip
+    -- updates once the group exists): focus_bold must take effect reliably.
+    local focus_attrs = { fg = '#98c379' }
+    if h.focus_bold then focus_attrs.bold = true end
+    vim.api.nvim_set_hl(0, h.focus, focus_attrs)
+    vim.api.nvim_set_hl(0, h.loc, { fg = '#5c6370' })
   end
   vim.api.nvim_set_hl(0, h.tab_active, { default = true, fg = '#ffffff', bg = '#444444', bold = true })
   vim.api.nvim_set_hl(0, h.tab_inactive, { default = true, fg = '#888888' })

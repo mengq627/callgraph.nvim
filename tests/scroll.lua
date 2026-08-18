@@ -12,7 +12,7 @@ local config = require('callgraph.config')
 local lsp_mod = require('callgraph.lsp')
 local view = require('callgraph.view')
 
-config.set({ show_call_site = false, window = { fixed_width = 15 } })
+config.set({ show_call_site = false, window = { position = 'right', fixed_width = 15 } })
 
 local U = 'file:///C:/dev/test.c'
 local function item(name, line)
