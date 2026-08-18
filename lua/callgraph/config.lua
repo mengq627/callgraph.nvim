@@ -8,9 +8,9 @@ M.defaults = {
   max_depth = 4,
   -- Show the call-site location (file:line) inside each box.
   show_call_site = true,
-  -- Highlight toggle. When true, the selected box's text (name + location)
-  -- is colored (default green); borders and lines stay unhighlighted. When
-  -- false (default), no highlight code runs at all.
+  -- Highlight toggle. When true, the selected box's function name is colored
+  -- (default green) and its location label dimmed; borders and lines stay
+  -- unhighlighted. When false, no highlight code runs at all.
   highlight = true,
   -- Use only the LSP call hierarchy — the language-agnostic, cross-file
   -- source. Heuristic fallback (body scan / name match) is single-file only
