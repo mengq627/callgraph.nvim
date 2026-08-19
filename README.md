@@ -159,3 +159,22 @@ nvim --headless -u NONE -l tests/integration_lsp.lua   # clangd ≥ 20：纯 LSP
 `tests/smoke.lua` 覆盖：去重/最小深度/菱形共享、循环终止节点、callin 镜像、
 `max_depth` 边界折叠、展开/折叠切换、C 调用点扫描器、fallback 编排、同列边箭头。
 `tests/clean.c` 是格式良好的样例；`tests/test.c` 是"先调用后声明"的菱形结构样例。
+
+### 覆盖率（luacov）
+
+每个测试都跑在 vendored 的 [luacov](https://lunarmodules.github.io/luacov/) 下（`tests/vendor/luacov/`，纯 Lua 无外部依赖）。
+
+```bash
+# 跑全部测试 + 输出覆盖率汇总
+nvim --headless -u NONE -l tests/run_coverage.lua
+
+# 额外检查"新提交代码 100% 覆盖"（新增的可执行行必须被测试执行）
+nvim --headless -u NONE -l tests/run_coverage.lua --diff origin/main
+```
+
+规则：
+
+- **测试是硬性门禁**：每次 push / PR 全量测试必须通过，否则阻断。
+- **覆盖率是非阻塞门禁**：仅在 PR 上显示新代码覆盖结果（`--diff <base>` 时，`git diff base` 新增的**可执行行**是否被测试执行，未覆盖会列出 `UNCOVERED NEW LINE`；新增行在**未被任何测试加载**的 `lua/callgraph` 文件里同样被标记）。它**不阻断合并**——committer 可以强制合入。push 推送不触发覆盖率检查。
+- **豁免异常分支**：用 `-- luacov: disable` / `-- luacov: enable` 注释包裹确定不需要覆盖的分支（如防御性/异常处理），这些行不计入 miss、也不被新代码检查要求。
+- GitHub Actions（`.github/workflows/ci.yml`）：`test` job 跑全量测试 + 覆盖率汇总（硬性）；`coverage` job（PR only，`continue-on-error`）做新代码覆盖检查，结果展示在 PR 门禁上但不阻止合入。覆盖率报告（`luacov.report.out`）作为构建产物上传。

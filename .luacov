@@ -1,0 +1,12 @@
+-- LuaCov configuration for callgraph.nvim.
+-- Coverage is only collected for the plugin's own modules; the tests,
+-- vendored luacov and runtime scaffolding are excluded.
+return {
+  reportfile = "luacov.report.out",
+  -- The runner (tests/run_coverage.lua) generates the report explicitly after
+  -- all test processes have aggregated their stats into luacov.stats.out.
+  runreport = false,
+  -- Path separator is always '/'; extension omitted. The hook normalizes file
+  -- paths to the OS separator, so match both "/" and "\" (Windows).
+  include = { "lua[/\\]callgraph" },
+}

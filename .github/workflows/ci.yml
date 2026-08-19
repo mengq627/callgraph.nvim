@@ -1,0 +1,57 @@
+name: CI
+
+# `test` is a hard gate: every push / pull request must pass all unit tests.
+# `coverage` (pull requests only) reports new-code coverage as a non-blocking
+# gate: it runs after the tests, its result is shown on the PR, but it does not
+# block merging — a committer can force-merge. Coverage is a signal, not a
+# hard requirement.
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Neovim
+        uses: muniftanuj/setup-neovim@v1
+        with:
+          neovim-version: stable
+
+      - name: Install clangd (integration tests)
+        run: sudo apt-get update && sudo apt-get install -y clangd
+
+      - name: Run tests + coverage summary
+        run: nvim --headless -u NONE -l tests/run_coverage.lua
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: luacov-report
+          path: luacov.report.out
+
+  # Pull-request-only, non-blocking new-code coverage gate.
+  coverage:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    continue-on-error: true # report the result; never block the merge
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # needed to diff against the PR base
+
+      - name: Install Neovim
+        uses: muniftanuj/setup-neovim@v1
+        with:
+          neovim-version: stable
+
+      - name: Install clangd (integration tests)
+        run: sudo apt-get update && sudo apt-get install -y clangd
+
+      - name: New-code coverage (non-blocking gate)
+        run: nvim --headless -u NONE -l tests/run_coverage.lua --diff origin/${{ github.event.pull_request.base.ref }}
