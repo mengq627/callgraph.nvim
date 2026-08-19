@@ -11,6 +11,8 @@ local util = require('callgraph.util')
 local config = require('callgraph.config')
 local lsp_mod = require('callgraph.lsp')
 local source_mod = require('callgraph.source')
+local graph_mod = require('callgraph.graph')
+local layout_mod = require('callgraph.layout')
 local view = require('callgraph.view')
 
 config.set({ show_call_site = true, debug = true, debug_location = true })
@@ -29,16 +31,15 @@ local l1a = item('func_l1_a', 20)
 local l2a = item('func_l2_a', 9)
 local l2c = item('func_l2_c', 3)
 local callees = { main = { { l1a, 34 } }, func_l1_a = { { l2a, 22 } }, func_l2_a = { { l2c, 11 } }, func_l2_c = {} }
-source_mod.make_fetch = function()
-  return function(node, direction)
-    local d = util.Deferred.new()
-    local list = callees[node.name] or {}
-    local out = {}
-    for _, e in ipairs(list) do out[#out + 1] = { item = e[1], call_site = { uri = U, line = e[2] } } end
-    d:resolve(out)
-    return d
-  end
+local function mock_fetch(node, direction)
+  local d = util.Deferred.new()
+  local list = callees[node.name] or {}
+  local out = {}
+  for _, e in ipairs(list) do out[#out + 1] = { item = e[1], call_site = { uri = U, line = e[2] } } end
+  d:resolve(out)
+  return d
 end
+source_mod.make_fetch = function() return mock_fetch end
 
 vim.cmd('edit ' .. root .. '/tests/test.c')
 view.open_with_root(main, 'callout', 'utf-16', { name = 'fake' })
@@ -49,16 +50,24 @@ local function check(name, cond, detail)
   if cond then print('PASS ' .. name) else failed = failed + 1; print('FAIL ' .. name .. (detail and (' :: ' .. tostring(detail)) or '')) end
 end
 
--- Expected cursor (row = text row, col = text start) per box after each move,
--- plus the character that must be under the cursor.
--- The tab bar now lives on the native 'tabline', not in the buffer, so the
--- canvas starts at row 1 and all graph text rows are 2.
--- main box col 3, l1a col 24, l2a col 50, l2c col 76 (all text row = 2).
+-- Expected cursor (row = text row, col = box text start) per box after each
+-- move, plus the character under the cursor. The columns are taken from the
+-- SAME layout the view renders, so the check is platform-independent (the
+-- character-grid columns differ across OSes / nvim builds when glyph widths
+-- are treated differently). Text rows are 2 (winbar lives on 'tabline').
+local layout = layout_mod.layout(
+  graph_mod.build(main, 'callout', { max_depth = 4 }, mock_fetch).value,
+  config.get(),
+  { direction = 'callout', selected_id = graph_mod.node_id(main) }
+)
+local function box_col(node)
+  return layout.boxes[graph_mod.node_id(node)].col
+end
 local expected = {
-  { 2, 3, 'm' }, -- main
-  { 2, 24, 'f' }, -- func_l1_a
-  { 2, 50, 'f' }, -- func_l2_a
-  { 2, 76, 'f' }, -- func_l2_c
+  { 2, box_col(main), 'm' }, -- main
+  { 2, box_col(l1a), 'f' }, -- func_l1_a
+  { 2, box_col(l2a), 'f' }, -- func_l2_a
+  { 2, box_col(l2c), 'f' }, -- func_l2_c
 }
 
 local win = vim.api.nvim_get_current_win()
