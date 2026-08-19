@@ -53,14 +53,16 @@ function hook.new(runner)
          end
       end
 
-      if line_nr > file.max then
+      -- Defensive: when stats are re-loaded from luacov.stats.out the per-file
+      -- records may lack max/max_hits; guard against comparing nil with a number.
+      if line_nr > (file.max or 0) then
          file.max = line_nr
       end
 
       local hits = (file[line_nr] or 0) + 1
       file[line_nr] = hits
 
-      if hits > file.max_hits then
+      if hits > (file.max_hits or 0) then
          file.max_hits = hits
       end
 
