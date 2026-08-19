@@ -10,6 +10,7 @@ vim.cmd('runtime! plugin/callgraph.lua')
 local util = require('callgraph.util')
 local config = require('callgraph.config')
 local lsp_mod = require('callgraph.lsp')
+local source_mod = require('callgraph.source')
 local view = require('callgraph.view')
 
 config.set({ show_call_site = true })
@@ -30,7 +31,7 @@ local callees = {
   func_l1_a = { { l2a, 5 } },
   func_l2_a = {},
 }
-lsp_mod.make_fetch = function()
+source_mod.make_fetch = function()
   return function(node, direction)
     local d = util.Deferred.new()
     local list = callees[node.name] or {}

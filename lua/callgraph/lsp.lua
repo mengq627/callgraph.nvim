@@ -7,7 +7,6 @@
 
 local util = require('callgraph.util')
 local graph_mod = require('callgraph.graph')
-local fallback_mod = require('callgraph.fallback')
 
 local M = {}
 
@@ -159,94 +158,6 @@ function M.resolve_root(bufnr)
     }, encoding, client
   end
   return nil, nil, nil
-end
-
---- Standard (spec) call-hierarchy fetch for one node. Returns a Deferred
---- resolving to `{ calls = {...}, err = friendly-string-or-nil }`. An error is
---- reported in the result rather than rejected so the caller can decide whether
---- to fall back to the heuristic.
-local function standard_fetch(client, encoding, node, direction)
-  local d = util.Deferred.new()
-  -- Pass the item through verbatim (including the server's opaque `data`
-  -- field) — clangd resolves the symbol via that data on later requests.
-  local item = node.item or {
-    name = node.name,
-    kind = node.kind,
-    uri = node.uri,
-    range = node.range,
-    selectionRange = node.selectionRange,
-  }
-  -- Note: only prepareCallHierarchy uses the textDocument/ prefix; the
-  -- incoming/outgoing calls are callHierarchy/* methods in the LSP spec.
-  local method = direction == 'callout' and 'callHierarchy/outgoingCalls' or 'callHierarchy/incomingCalls'
-  client.request(method, { item = item }, function(err, result)
-    if err then
-      -- clangd < 20 advertises call hierarchy but does not implement
-      -- outgoingCalls; turn the opaque -32601 into something actionable.
-      if err.code == -32601 or (err.message and err.message:find('method not found')) then
-        d:resolve({ calls = {}, err = '语言服务器未实现 ' .. method .. '（clangd 的 outgoingCalls 需要 LLVM ≥ 20，callin/incomingCalls 通常可用）' })
-      else
-        d:resolve({ calls = {}, err = tostring(err.message or err) })
-      end
-      return
-    end
-    local calls = {}
-    for _, c in ipairs(result or {}) do
-      local citem = direction == 'callout' and c.to or c.from
-      local cs = nil
-      if c.fromRanges and c.fromRanges[1] then
-        cs = { uri = citem.uri, line = c.fromRanges[1].start.line }
-      end
-      calls[#calls + 1] = { item = citem, call_site = cs }
-    end
-    d:resolve({ calls = calls })
-  end, vim.uri_to_bufnr(node.uri))
-  return d
-end
-
---- Create the fetch function injected into graph building.
----
---- Strategy per node: try the standard call-hierarchy request; if the server
---- rejects the method (clangd < 20 outgoingCalls) remember it is broken for the
---- whole build and stop trying; if the standard result is empty, try the
---- heuristic fallback and prefer whichever returns more. `opts.fallback` gates
---- the heuristic (default true). When fallback is disabled, a server error is
---- surfaced as an error instead of being silently swallowed.
-function M.make_fetch(client, encoding, opts)
-  local fallback_fetch = fallback_mod.make_fetch(client, encoding, M.enclosing_function_at, M.find_functions_by_name)
-  local std_broken = {} -- direction -> bool
-  return function(node, direction)
-    local d = util.Deferred.new()
-    util.async_start(function()
-      local ok, calls = pcall(function()
-        local std_calls, std_err
-        if not std_broken[direction] then
-          local res = util.await(standard_fetch(client, encoding, node, direction))
-          std_calls, std_err = res.calls, res.err
-          if std_err then std_broken[direction] = true end
-        end
-        if std_broken[direction] then std_calls = nil end
-
-        if opts and opts.fallback then
-          -- Fall back when the standard method is broken OR returned nothing.
-          if std_broken[direction] or not std_calls or #std_calls == 0 then
-            if std_broken[direction] and direction == 'callout' then
-              notify_once('fallback_callout', '服务器不支持 outgoingCalls，callout 使用函数体扫描启发式')
-            end
-            local fb = util.await(fallback_fetch(node, direction))
-            if #fb > 0 then return fb end
-          end
-          return std_calls or {}
-        end
-
-        -- No fallback: surface server errors.
-        if std_err then error(std_err, 0) end
-        return std_calls or {}
-      end)
-      if ok then d:resolve(calls) else d:reject(calls) end
-    end)
-    return d
-  end
 end
 
 --- Jump to a definition location, converting the LSP position to buffer bytes.

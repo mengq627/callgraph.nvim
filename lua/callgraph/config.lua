@@ -12,12 +12,16 @@ M.defaults = {
   -- (default green) and its location label dimmed; borders and lines stay
   -- unhighlighted. When false, no highlight code runs at all.
   highlight = true,
-  -- Use only the LSP call hierarchy — the language-agnostic, cross-file
-  -- source. Heuristic fallback (body scan / name match) is single-file only
-  -- and cannot resolve cross-file calls, so it is opt-in via `fallback = true`.
-  -- When a server lacks call-hierarchy support (clangd < 20 for outgoingCalls)
-  -- an actionable error is shown instead of guessing.
-  fallback = false,
+  -- Symbol / call-graph sources, in priority order. At startup the plugin
+  -- checks which are actually available on this machine (executable + index
+  -- present) and only enables those — the check result is cached, so per-query
+  -- lookups never re-probe.
+  --   lsp    : LSP call hierarchy — language-agnostic, cross-file. Needs a
+  --            server implementing outgoingCalls (clangd >= 20).
+  --   cscope : cscope database queries (needs `cscope` + cscope.out; C/C++).
+  --   ctags  : ctags (needs `ctags` + tags file; reserved, not implemented yet).
+  --   auto   : heuristic single-file fallback (body scan / name match).
+  sources = { 'lsp', 'auto' },
   window = {
     -- Split position: "right" (vertical split) or "bottom" (horizontal split).
     position = 'bottom',

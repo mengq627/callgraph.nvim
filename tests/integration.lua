@@ -17,11 +17,12 @@ vim.cmd('runtime! plugin/callgraph.lua')
 local util = require('callgraph.util')
 local config_mod = require('callgraph.config')
 local lsp_mod = require('callgraph.lsp')
+local source_mod = require('callgraph.source')
 local graph_mod = require('callgraph.graph')
 local layout_mod = require('callgraph.layout')
 local render_mod = require('callgraph.render')
 
-config_mod.set({ show_call_site = true, fallback = true })
+config_mod.set({ show_call_site = true, sources = { 'lsp', 'auto' } })
 
 vim.cmd('edit ' .. root .. '/tests/clean.c')
 vim.lsp.start({
@@ -62,7 +63,7 @@ local function names_of(graph)
 end
 
 local function check_build(name, root, direction, client, encoding, min_nodes, expect_names)
-  local d = graph_mod.build(root, direction, { max_depth = 4 }, lsp_mod.make_fetch(client, encoding, config_mod.get()))
+  local d = graph_mod.build(root, direction, { max_depth = 4 }, source_mod.make_fetch(encoding, client, config_mod.get()))
   d:next(function(g)
     local names = names_of(g)
     print(name .. ' nodes: ' .. table.concat(names, ', '))

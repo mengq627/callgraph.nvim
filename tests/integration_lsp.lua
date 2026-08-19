@@ -11,6 +11,7 @@ vim.cmd('runtime! plugin/callgraph.lua')
 local util = require('callgraph.util')
 local config_mod = require('callgraph.config')
 local lsp_mod = require('callgraph.lsp')
+local source_mod = require('callgraph.source')
 local graph_mod = require('callgraph.graph')
 
 local CLANGD20 = 'D:/Download/Chrome/clangd-windows-20.1.8/clangd_20.1.8/bin/clangd.exe'
@@ -19,7 +20,7 @@ if vim.fn.filereadable(CLANGD20) == 0 then
   os.exit(0)
 end
 
-config_mod.set({ show_call_site = true, fallback = false })
+config_mod.set({ show_call_site = true, sources = { 'lsp' } })
 
 vim.cmd('edit ' .. root .. '/tests/test.c')
 vim.lsp.start({
@@ -51,7 +52,7 @@ util.async_start(function()
     if not item or item.name ~= 'main' then os.exit(1) end
 
     -- callout(main): pure LSP outgoingCalls, must reach func_l2_c (4 levels).
-    local d = graph_mod.build(item, 'callout', { max_depth = 4 }, lsp_mod.make_fetch(client, enc, config_mod.get()))
+    local d = graph_mod.build(item, 'callout', { max_depth = 4 }, source_mod.make_fetch(enc, client, config_mod.get()))
     d:next(function(g)
       local found = {}
       for _, n in pairs(g.nodes) do found[n.name] = true end
@@ -67,7 +68,7 @@ util.async_start(function()
       local item2 = lsp_mod.resolve_root(vim.api.nvim_get_current_buf())
       check('resolve root func_l1_a', item2 ~= nil and item2.name == 'func_l1_a')
       if not item2 or item2.name ~= 'func_l1_a' then os.exit(1) end
-      local d2 = graph_mod.build(item2, 'callin', { max_depth = 2 }, lsp_mod.make_fetch(client, enc, config_mod.get()))
+      local d2 = graph_mod.build(item2, 'callin', { max_depth = 2 }, source_mod.make_fetch(enc, client, config_mod.get()))
       d2:next(function(g2)
         local callers = {}
         for _, n in pairs(g2.nodes) do callers[#callers + 1] = n.name end

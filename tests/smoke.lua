@@ -202,6 +202,7 @@ check('fallback callout call_site recorded', fb_result and fb_result[1].call_sit
 
 -- ---- Test 9: combined fetch prefers standard over fallback
 local lsp_mod = require('callgraph.lsp')
+local source_mod = require('callgraph.source')
 -- standard client: incomingCalls returns 2 callers, references returns nothing
 local std_client = {
   request = function(method, params, cb, bufnr)
@@ -212,7 +213,7 @@ local std_client = {
     end
   end,
 }
-local combined = lsp_mod.make_fetch(std_client, 'utf-16', { fallback = true })
+local combined = source_mod.make_fetch('utf-16', std_client, { sources = { 'lsp', 'auto' } })
 local c_node = { name = 'func', kind = 12, uri = 'file:///x.c', range = { start = { line = 0, character = 0 }, ['end'] = { line = 1, character = 0 } }, selectionRange = { start = { line = 0, character = 0 }, ['end'] = { line = 0, character = 4 } } }
 local c_res = combined(c_node, 'callin').value
 check('standard result used when non-empty', c_res ~= nil and #c_res == 1 and c_res[1].item.name == 'main')

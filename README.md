@@ -49,16 +49,20 @@
 - **长名截断**：超宽函数名截断为 `…`，光标悬停时在消息区显示完整路径。
 - **自动滚动**：移动选中框时，若函数框超出窗口可视范围，画布自动横向/纵向滚动让它保持可见。
 - **多标签页**：一个视图内可同时打开多个「函数 + 方向」的图，winbar 显示标签，`<Tab>` 切换。
-- **纯 LSP 为主**：默认只走 LSP call hierarchy（语言无关、跨文件）；启发式 fallback 默认关闭（见下）。
+- **多来源**：调用关系可来自 `lsp` / `cscope` / `ctags` / `auto` 多种方式，按 `sources` 配置的优先级取第一个有结果者；启动时后台探测各来源是否可用（如 cscope 二进制/索引不存在则自动跳过），结果缓存避免每次查询重新探测。
 - **Lazy.nvim 友好**：`documentSymbol` 在 `LspAttach` 后后台异步缓存，打开文件零阻塞。
 
 ## 数据来源
 
-- **标准 Call Hierarchy（默认，首选）**：`incomingCalls`（callin）clangd ≥ LLVM 12；`outgoingCalls`（callout）需要 clangd **≥ LLVM 20**（2024-12 才落地）。
-- **启发式 fallback（默认关闭，`fallback = true` 开启）**：服务器缺 call hierarchy 能力时兜底——callout 扫描函数体里的调用点逐个 `prepareCallHierarchy` 解析，解析不到时**按函数名在当前文件 documentSymbol 里匹配**（能处理先调用后声明的源码）；callin 用 `references` + documentSymbol 定位调用者。注意它**只能单文件内兜底**，跨文件调用解析不了。
+`config.sources` 按优先级列出可用来源（`sources = { 'lsp', 'auto' }`）：
+
+- **`lsp`（默认首选）**：LSP Call Hierarchy——语言无关、跨文件。`incomingCalls`（callin）clangd ≥ LLVM 12；`outgoingCalls`（callout）需要 clangd **≥ LLVM 20**（2024-12 才落地）。
+- **`cscope`**：cscope 数据库查询（需要 `cscope` 二进制 + `cscope.out`，适合 C/C++）。
+- **`ctags`**：ctags（预留，尚未实现）。
+- **`auto`（兜底）**：启发式单文件——callout 扫描函数体里的调用点逐个 `prepareCallHierarchy` 解析，解析不到时**按函数名在当前文件 documentSymbol 里匹配**（能处理先调用后声明的源码）；callin 用 `references` + documentSymbol 定位调用者。**只能单文件内兜底**，跨文件调用解析不了。
 
 > 建议：使用 clangd ≥ 20，这样 callin / callout 都走标准语义分析（跨文件、精确）。
-> clangd < 20 时 callout 会提示升级；如需临时兜底可开 `fallback = true`。
+> clangd < 20 时 callout 会从 lsp 自动降到下一个来源（如 `auto`）。
 
 ## 要求
 
@@ -87,7 +91,9 @@
 require('callgraph').setup({
   max_depth = 4,          -- 默认最多展开的边数
   show_call_site = true,  -- 框内显示 文件:行号
-  fallback = false,       -- 默认只用 LSP call hierarchy；启发式兜底（单文件）需显式开启
+  sources = { 'lsp', 'auto' }, -- 调用关系来源，按优先级取第一个有结果者：
+                              -- lsp / cscope / ctags（预留）/ auto（单文件启发式）；
+                              -- 启动时自动探测哪些可用（如未装 cscope 则跳过）
   highlight = true,       -- 高亮开关（默认开）。选中函数名标色、位置标注变灰
   window = {
     position = 'bottom',     -- 'right'（右侧竖分） | 'bottom'（底部横分）
@@ -129,7 +135,13 @@ plugin/callgraph.lua  懒加载入口：注册 :Callout / :Callin / :CallgraphLo
 lua/callgraph/
   init.lua      setup()、公共 API、LspAttach 后台缓存
   config.lua    默认配置 + 合并 + 高亮组定义
-  lsp.lua       LSP 适配层：根函数解析、callHierarchy 请求、标准+fallback 组合、跳定义
+  source.lua    来源管理器：可用性探测缓存、按 sources 优先级组合 fetch、根函数解析
+  source/       symbol 来源（每个一种调用关系查询方式）：
+    lsp.lua       LSP call hierarchy（outgoing/incomingCalls）
+    auto.lua      启发式单文件（复用 scanner + fallback）
+    cscope.lua    cscope 数据库查询（-dL -2/-3）
+    ctags.lua     ctags（预留）
+  lsp.lua       LSP 工具：根函数解析（prepareCallHierarchy + documentSymbol）、跳定义
   graph.lua     建图：递归取数、去重、循环检测、深度裁剪（纯逻辑，注入 fetch）
   scanner.lua   纯 C 调用点扫描器（跳过注释/字符串/预处理，返回调用 token）
   fallback.lua  启发式取数：callout 扫描函数体+解析调用点（含按名兜底），callin 用 references

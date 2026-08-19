@@ -9,6 +9,7 @@ local graph_mod = require('callgraph.graph')
 local layout_mod = require('callgraph.layout')
 local render_mod = require('callgraph.render')
 local lsp_mod = require('callgraph.lsp')
+local source_mod = require('callgraph.source')
 local util = require('callgraph.util')
 
 local M = {}
@@ -27,7 +28,9 @@ function M.open(direction)
       if state and state.win and curr_win == state.win and state.orig_win and vim.api.nvim_win_is_valid(state.orig_win) then
         bufnr = vim.api.nvim_win_get_buf(state.orig_win)
       end
-      local root, encoding, client = lsp_mod.resolve_root(bufnr)
+      local opts = config.get()
+      source_mod.check_available(opts)
+      local root, encoding, client = source_mod.resolve_root(bufnr, opts)
       if not root then return end
       M.open_with_root(root, direction, encoding, client)
     end)
@@ -175,7 +178,7 @@ end
 function M.rebuild()
   local tab = active_tab()
   if not tab then return end
-  local fetch = lsp_mod.make_fetch(state.client, state.encoding, config.get())
+  local fetch = source_mod.make_fetch(state.encoding, state.client, config.get())
   local d = graph_mod.build(tab.root, tab.direction, { max_depth = tab.view_depth }, fetch)
   d:next(function(graph)
     tab.graph = graph
@@ -349,7 +352,7 @@ function M.toggle_expand()
   if not tab or not tab.graph then return end
   local node = tab.graph.nodes[tab.selected_id]
   if not node then return end
-  local fetch = lsp_mod.make_fetch(state.client, state.encoding, config.get())
+  local fetch = source_mod.make_fetch(state.encoding, state.client, config.get())
   local d = graph_mod.expand(tab.graph, node, fetch)
   d:next(function(g)
     tab.graph = g
