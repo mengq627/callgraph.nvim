@@ -120,7 +120,7 @@ function M.resolve_root(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   local client = find_client(bufnr, 'textDocument/prepareCallHierarchy')
   if not client then
-    vim.notify('Callgraph: 没有支持 call hierarchy 的语言服务器（C 请使用 clangd）', vim.log.levels.WARN)
+    vim.notify('Callgraph: no language server with call hierarchy support (for C, use clangd)', vim.log.levels.WARN)
     return nil, nil, nil
   end
   local encoding = client.offset_encoding or 'utf-16'

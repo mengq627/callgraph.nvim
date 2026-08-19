@@ -185,7 +185,7 @@ function M.rebuild()
     tab.selected_id = graph.root.id
     M.render_view()
   end, function(err)
-    vim.notify('Callgraph: 建图失败: ' .. tostring(err), vim.log.levels.ERROR)
+    vim.notify('Callgraph: graph build failed: ' .. tostring(err), vim.log.levels.ERROR)
   end)
 end
 
@@ -358,7 +358,7 @@ function M.toggle_expand()
     tab.graph = g
     M.render_view()
   end, function(err)
-    vim.notify('Callgraph: 展开失败: ' .. tostring(err), vim.log.levels.ERROR)
+    vim.notify('Callgraph: expand failed: ' .. tostring(err), vim.log.levels.ERROR)
   end)
 end
 
@@ -462,16 +462,16 @@ end
 
 function M.show_help()
   vim.notify(table.concat({
-    'Callgraph 快捷键',
-    '  h/j/k/l / 方向键   移动选中框',
-    '  空格                展开/折叠',
-    '  Enter / d           跳转到定义',
-    '  q / Esc             关闭当前 tab',
-    '  r                   刷新',
+    'Callgraph keymaps',
+    '  h/j/k/l / arrows    move selection',
+    '  <Space>             expand / collapse',
+    '  Enter / d           jump to definition',
+    '  q / Esc             close tab',
+    '  r                   refresh',
     '  i / o               callin / callout',
-    '  + / -               增加/减少深度',
-    '  单击选中 / 双击展开  （鼠标）',
-    '  Tab / Shift-Tab    切换 tab',
+    '  + / -               depth +1 / -1',
+    '  click / dbl-click   select / expand (mouse)',
+    '  Tab / Shift-Tab     switch tab',
   }, '\n'), vim.log.levels.INFO, { title = 'Callgraph' })
 end
 

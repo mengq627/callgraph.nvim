@@ -29,6 +29,6 @@ vim.api.nvim_create_user_command('CallgraphDebug', function(args)
     config.update({ debug = false })
     vim.notify('Callgraph debug off', vim.log.levels.INFO, { title = 'Callgraph' })
   else
-    vim.notify('用法: :CallgraphDebug on | off', vim.log.levels.WARN, { title = 'Callgraph' })
+    vim.notify('Usage: :CallgraphDebug on | off', vim.log.levels.WARN, { title = 'Callgraph' })
   end
 end, { nargs = '?' })

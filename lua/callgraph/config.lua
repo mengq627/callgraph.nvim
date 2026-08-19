@@ -44,9 +44,9 @@ M.defaults = {
     max_loc_width = 22,
     -- Arrowhead glyphs (Nerd Font). Default: Font Awesome solid arrows.
     -- Alternatives:
-    --   { right='', down='', up='', left='' }  -- FA chevrons（粗 > 风格）
-    --   { right='➡', down='⬇', up='⬆', left='⬅' }   -- 重型 Unicode 箭头（无需 Nerd Font）
-    --   { right='→', down='↓', up='↑', left='←' }   -- Unicode 带杆（无需 Nerd Font）
+    --   { right='', down='', up='', left='' }  -- FA chevrons (thick > style)
+    --   { right='➡', down='⬇', up='⬆', left='⬅' }   -- heavy Unicode arrows (no Nerd Font)
+    --   { right='→', down='↓', up='↑', left='←' }   -- Unicode shaft arrows (no Nerd Font)
     arrows = { right = '', down = '', up = '', left = '' },
   },
   highlights = {
@@ -70,17 +70,17 @@ M.defaults = {
     move_up_alt = '<Up>',
     move_right_alt = '<Right>',
     toggle_expand = '<Space>',
-    close = 'q', -- 关闭当前 tab（最后一个 tab 关闭时关闭窗口）
+    close = 'q', -- close current tab (closes the view when the last tab closes)
     close_alt = '<Esc>',
     refresh = 'r',
     to_callin = 'i',
     to_callout = 'o',
     depth_up = '+',
     depth_down = '-',
-    jump_to_def = '<CR>', -- 跳转到主界面中的函数定义
+    jump_to_def = '<CR>', -- jump to the definition in the main window
     jump_to_def_alt = 'd',
-    tab_next = '<Tab>', -- 下一个 tab（覆盖 barbar 等全局映射）
-    tab_prev = '<S-Tab>', -- 上一个 tab
+    tab_next = '<Tab>', -- next tab (overrides global mappings like barbar)
+    tab_prev = '<S-Tab>', -- previous tab
     help = '?',
   },
 }
