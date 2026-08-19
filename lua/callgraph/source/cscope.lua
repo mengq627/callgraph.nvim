@@ -6,9 +6,6 @@
 --- Output per line: `file symbol line <call text>`.
 ---
 --- Needs the `cscope` binary and a cscope.out database in the project.
----
---- NOTE: the actual query is implemented in a follow-up commit; for now this
---- provider only detects availability (binary + database) and resolves empty.
 
 local util = require('callgraph.util')
 
@@ -32,12 +29,58 @@ function M.available(opts)
   return M.find_db() ~= nil
 end
 
+--- Parse cscope -L output into call records.
+--- Each line: `<file> <symbol> <line> <call text>`; with `-P <dir>` the file
+--- is absolute. line is 1-based.
+function M.parse_output(stdout)
+  local calls = {}
+  for line in (stdout or ''):gmatch('[^\r\n]+') do
+    local file, sym, ln = line:match('^(%S+)%s+(%S+)%s+(%d+)')
+    if file and sym and ln then
+      local line_no = tonumber(ln)
+      calls[#calls + 1] = {
+        item = {
+          name = sym,
+          kind = 12, -- function
+          uri = vim.uri_from_fname(file),
+          range = { start = { line = line_no - 1, character = 0 }, ['end'] = { line = line_no - 1, character = 0 } },
+          selectionRange = { start = { line = line_no - 1, character = 0 }, ['end'] = { line = line_no - 1, character = #sym } },
+        },
+        call_site = { uri = vim.uri_from_fname(file), line = line_no - 1 },
+      }
+    end
+  end
+  return calls
+end
+
+--- Run one cscope query. Returns Deferred resolving to parsed calls.
+--- direction: 'callout' -> -2 (callees), 'callin' -> -3 (callers).
+function M.query(funcname, direction, opts)
+  local d = util.Deferred.new()
+  local db = M.find_db()
+  if not db or not funcname then
+    d:resolve({})
+    return d
+  end
+  local op = direction == 'callin' and '-3' or '-2'
+  local db_dir = vim.fn.fnamemodify(db, ':h')
+  -- -P <dir> makes cscope emit absolute filenames (relative paths get the dir
+  -- prepended), so parsing yields jumpable uris.
+  local cmd = { 'cscope', '-dL', op, funcname, '-f', db, '-P', db_dir }
+  vim.system(cmd, { text = true }, function(proc)
+    if proc.code ~= 0 then
+      d:resolve({})
+      return
+    end
+    d:resolve(M.parse_output(proc.stdout))
+  end)
+  return d
+end
+
 --- Fetch function for graph building: node, direction -> Deferred(calls).
 function M.make_fetch(encoding, client, opts)
   return function(node, direction)
-    local d = util.Deferred.new()
-    d:resolve({})
-    return d
+    return M.query(node.name, direction, opts)
   end
 end
 

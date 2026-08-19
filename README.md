@@ -166,6 +166,7 @@ nvim --headless -u NONE -l tests/ui.lua                # 无服务器：分割�
 nvim --headless -u NONE -l tests/integration.lua       # 真 clangd：clean.c 的 callout(fallback)+callin
 nvim --headless -u NONE -l tests/integration_testc.lua # 真 clangd：test.c 先调用后声明的 name-match 兜底
 nvim --headless -u NONE -l tests/integration_lsp.lua   # clangd ≥ 20：纯 LSP callout 4 层 + callin
+nvim --headless -u NONE -l tests/cscope.lua            # cscope provider：输出解析 / 索引发现 / 可用性探测
 ```
 
 `tests/smoke.lua` 覆盖：去重/最小深度/菱形共享、循环终止节点、callin 镜像、
