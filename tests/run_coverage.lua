@@ -19,9 +19,17 @@ local vendor_inj = ("lua package.path='%s/tests/vendor/luacov/?.lua;%s/tests/ven
   :format(root, root)
 
 -- nvim `-l script.lua --diff <base>` passes trailing args in the global `arg`.
+-- `--no-run` skips running the tests / generating the report and only re-parses
+-- an existing luacov.report.out (used by CI to reuse the hard-gate run's report
+-- for the non-blocking new-code check, avoiding a duplicated test run).
 local diff_base = nil
+local no_run = false
 for i, a in ipairs(arg or {}) do
-  if a == '--diff' and arg[i + 1] then diff_base = arg[i + 1] end
+  if a == '--diff' and arg[i + 1] then
+    diff_base = arg[i + 1]
+  elseif a == '--no-run' then
+    no_run = true
+  end
 end
 
 local failed = 0
@@ -46,31 +54,33 @@ table.sort(tests)
 -- 2. Fresh stats, then run each test in its own nvim process (luacov aggregates
 --    hit counts across processes by appending to luacov.stats.out).
 -- ---------------------------------------------------------------------------
-os.remove(root .. '/luacov.stats.out')
 local run_failures = 0
-for _, t in ipairs(tests) do
-  local cmd = { 'nvim', '--headless', '-u', 'NONE', '-c', vendor_inj, '-l', t }
-  local res = vim.system(cmd, { cwd = root, text = true }):wait()
-  if res.code ~= 0 then
-    run_failures = run_failures + 1
-    print('FAIL test ' .. vim.fn.fnamemodify(t, ':t'))
-    local out = (res.stdout or '') .. (res.stderr or '')
-    for line in (out):gmatch('[^\r\n]+') do
-      if line:find('FAIL') or line:find('Error') or line:find('ERR') then print('   ' .. line) end
+if not no_run then
+  os.remove(root .. '/luacov.stats.out')
+  for _, t in ipairs(tests) do
+    local cmd = { 'nvim', '--headless', '-u', 'NONE', '-c', vendor_inj, '-l', t }
+    local res = vim.system(cmd, { cwd = root, text = true }):wait()
+    if res.code ~= 0 then
+      run_failures = run_failures + 1
+      print('FAIL test ' .. vim.fn.fnamemodify(t, ':t'))
+      local out = (res.stdout or '') .. (res.stderr or '')
+      for line in (out):gmatch('[^\r\n]+') do
+        if line:find('FAIL') or line:find('Error') or line:find('ERR') then print('   ' .. line) end
+      end
+    else
+      print('PASS test ' .. vim.fn.fnamemodify(t, ':t'))
     end
-  else
-    print('PASS test ' .. vim.fn.fnamemodify(t, ':t'))
   end
-end
-print('---')
-print(('tests: %d passed, %d failed'):format(#tests - run_failures, run_failures))
+  print('---')
+  print(('tests: %d passed, %d failed'):format(#tests - run_failures, run_failures))
 
--- ---------------------------------------------------------------------------
--- 3. Generate the report from the merged stats.
--- ---------------------------------------------------------------------------
-local luacov = require('luacov') -- vendored; returns the runner module
-luacov.configuration = luacov.load_config(root .. '/.luacov')
-luacov.run_report(luacov.configuration)
+  -- -----------------------------------------------------------------------
+  -- 3. Generate the report from the merged stats.
+  -- -----------------------------------------------------------------------
+  local luacov = require('luacov') -- vendored; returns the runner module
+  luacov.configuration = luacov.load_config(root .. '/.luacov')
+  luacov.run_report(luacov.configuration)
+end
 
 -- ---------------------------------------------------------------------------
 -- 4. Parse the report into per-file line coverage.

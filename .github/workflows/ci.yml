@@ -1,9 +1,10 @@
 name: CI
 
-# `test` is a hard gate: every push / pull request must pass all unit tests.
-# `coverage` reports new-code coverage as a non-blocking gate (push and PR):
-# it shows the result but never blocks — a committer can force-merge.
-# Coverage is a signal, not a hard requirement.
+# Single job, two gates:
+#   - tests + coverage summary are the HARD gate (fail the job / block).
+#   - new-code coverage reuses the same run's report (--no-run) as a NON-BLOCKING
+#     gate (`continue-on-error`): it shows the result but never blocks — a
+#     committer can force-merge. Coverage is a signal, not a hard requirement.
 on:
   push:
   pull_request:
@@ -11,34 +12,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Install Neovim
-        uses: MunifTanjim/setup-neovim-action@v1
-        with:
-          tag: stable
-
-      - name: Install clangd (integration tests)
-        run: sudo apt-get update && sudo apt-get install -y clangd
-
-      - name: Run tests + coverage summary
-        run: nvim --headless -u NONE -l tests/run_coverage.lua
-
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: luacov-report
-          path: luacov.report.out
-
-  # Non-blocking new-code coverage gate: runs on push and PR, reports the
-  # result but never blocks the merge.
-  coverage:
-    runs-on: ubuntu-latest
-    continue-on-error: true # report the result; never block the merge
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,10 +25,22 @@ jobs:
       - name: Install clangd (integration tests)
         run: sudo apt-get update && sudo apt-get install -y clangd
 
-      - name: New-code coverage (pull request)
-        if: github.event_name == 'pull_request'
-        run: nvim --headless -u NONE -l tests/run_coverage.lua --diff origin/${{ github.event.pull_request.base.ref }}
+      - name: Run tests + coverage summary (hard gate)
+        run: nvim --headless -u NONE -l tests/run_coverage.lua
 
-      - name: New-code coverage (push)
+      - name: New-code coverage (pull request, non-blocking)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: nvim --headless -u NONE -l tests/run_coverage.lua --diff origin/${{ github.event.pull_request.base.ref }} --no-run
+
+      - name: New-code coverage (push, non-blocking)
         if: github.event_name != 'pull_request'
-        run: nvim --headless -u NONE -l tests/run_coverage.lua --diff HEAD~1
+        continue-on-error: true
+        run: nvim --headless -u NONE -l tests/run_coverage.lua --diff HEAD~1 --no-run
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: luacov-report
+          path: luacov.report.out
