@@ -43,10 +43,10 @@ Mouse: single click selects a box, **double-click** expands/collapses, scroll wh
 
 ## Features
 
-- **Real DAG**: a function appears only once in the whole graph (dedup by `uri + name + definition position`); diamond shapes share nodes.
+- **Tree expansion**: every call path expands into its own nodes — the same function called from different places appears once per path (no dedup), so edges never cross and it's always clear who calls whom.
 - **Depth limit**: `max_depth` defaults to 4 (at most 4 edges from the root). Boundary nodes collapse to a `▸` marker; Enter / double-click expands, `+` / `-` adjust depth.
 - **Cycles**: when a back edge is detected the node is not expanded again; a highlighted **⟳** terminal is shown next to the name and no back edge is drawn.
-- **Dedup + min depth**: a node is placed on the layer of its shortest path from the root.
+- **Crossing-free edges**: rows are assigned so each subtree occupies a contiguous band; parent→child edges never overlap other edges.
 - **Call-site labels**: each box shows the call site `file:line` (`show_call_site` can be turned off).
 - **Long-name truncation**: over-wide function names are truncated to `…`; hovering shows the full path in the message area.
 - **Auto-scroll**: moving the selection scrolls the canvas (horizontal/vertical) so the focused box stays visible.
@@ -147,7 +147,7 @@ lua/callgraph/
     cscope.lua    cscope database queries (-dL -2/-3)
     ctags.lua     ctags (reserved)
   lsp.lua       LSP tools: root resolution (prepareCallHierarchy + documentSymbol), jump to definition
-  graph.lua     graph build: recursive fetch, dedup, cycle detection, depth clip (pure logic, injected fetch)
+  graph.lua     graph build: recursive fetch (tree, no dedup), cycle detection, depth clip (pure logic, injected fetch)
   scanner.lua   pure-C call-site scanner (skips comments/strings/preprocessor, returns call tokens)
   fallback.lua  heuristic fetch: callout body-scan + name match, callin via references
   layout.lua    layered layout + orthogonal edge routing (pure functions)
@@ -175,7 +175,7 @@ nvim --headless -u NONE -l tests/cscope.lua            # cscope provider: output
 nvim --headless -u NONE -l tests/integration_complex.lua # test_complex.c: diamond / cycles / fan-out / deep chain
 ```
 
-`tests/smoke.lua` covers: dedup/min-depth/diamond sharing, cycle terminals, callin mirror,
+`tests/smoke.lua` covers: tree expansion (a symbol appears once per call path), cycle terminals, callin mirror,
 `max_depth` boundary collapse, expand/collapse, the C call-site scanner, fallback orchestration, same-column arrows.
 `tests/clean.c` is well-formed sample source; `tests/test.c` is a call-before-declaration diamond sample.
 

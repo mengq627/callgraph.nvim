@@ -77,15 +77,27 @@ end
 local nid = graph_mod.node_id
 local opts = config.get()
 
--- ---- Test 1: build callout, dedup, min-depth placement
+-- Tree mode: non-root nodes have path-qualified ids, so look them up by name.
+local function find_all_by_name(graph, name)
+  local out = {}
+  for _, n in pairs(graph.nodes) do
+    if n.name == name then out[#out + 1] = n end
+  end
+  return out
+end
+local function find_by_name(graph, name)
+  return find_all_by_name(graph, name)[1]
+end
+
+-- ---- Test 1: build callout (tree mode: each call path gets its own node)
 local g = graph_mod.build(main, 'callout', { max_depth = 4 }, make_fetch(callees)).value
 check('build resolves', g ~= nil)
 if g then
-  check('6 nodes (dedup)', vim.tbl_count(g.nodes) == 6)
-  local n = g.nodes[nid(l2c)]
-  check('l2_c exists once', n ~= nil)
-  check('l2_c min depth 3', n and n.depth == 3)
-  check('l2_c has 2 parents (diamond)', n and #n.parents == 2)
+  check('7 nodes (tree, l2c reached twice)', vim.tbl_count(g.nodes) == 7)
+  local l2cs = find_all_by_name(g, 'func_l2_c')
+  check('l2_c appears twice (via l2a and l2b)', #l2cs == 2, 'got ' .. #l2cs)
+  check('l2_c path depth is 3', l2cs[1] and l2cs[1].depth == 3 and l2cs[2] and l2cs[2].depth == 3)
+  check('each l2_c has 1 parent (tree)', l2cs[1] and #l2cs[1].parents == 1 and #l2cs[2].parents == 1)
   check('no cycle nodes in diamond', (function()
     for _, x in pairs(g.nodes) do if x.is_cycle then return false end end
     return true
@@ -106,11 +118,15 @@ end
 check('cycle terminal created', cyc ~= nil)
 check('cycle terminal is a leaf', cyc and not cyc.has_children)
 
--- ---- Test 3: layout (callout)
+-- ---- Test 3: layout (callout, tree)
 local lay = layout_mod.layout(g, opts, { direction = 'callout', selected_id = nid(main) })
-check('layout has 6 boxes', vim.tbl_count(lay.boxes) == 6)
-check('l2_c right of l1_a', lay.boxes[nid(l2c)].col > lay.boxes[nid(l1a)].col)
-check('l1_a/l1_b same column', lay.boxes[nid(l1a)].col == lay.boxes[nid(l1b)].col)
+check('layout has 7 boxes', vim.tbl_count(lay.boxes) == 7)
+local l1a_node = find_by_name(g, 'func_l1_a')
+local l1b_node = find_by_name(g, 'func_l1_b')
+local l2c_boxes = {}
+for id, b in pairs(lay.boxes) do if b.text:match('func_l2_c') then l2c_boxes[#l2c_boxes + 1] = b end end
+check('l2_c boxes right of l1_a', #l2c_boxes == 2 and l2c_boxes[1].col > lay.boxes[l1a_node.id].col)
+check('l1_a/l1_b same column', lay.boxes[l1a_node.id].col == lay.boxes[l1b_node.id].col)
 local function overlaps(a, b)
   return a.row < b.row + b.height and b.row < a.row + a.height
     and a.col < b.col + b.width and b.col < a.col + a.width
@@ -142,19 +158,21 @@ check('cycle glyph rendered', text2:find('⟳') ~= nil)
 -- ---- Test 5: callin is a mirror (root rightmost)
 local gci = graph_mod.build(l2c, 'callin', { max_depth = 4 }, make_fetch(callers)).value
 local layci = layout_mod.layout(gci, opts, { direction = 'callin', selected_id = nid(l2c) })
-check('callin root rightmost', layci.boxes[nid(l2c)].col > layci.boxes[nid(main)].col)
-check('callin l2_a at depth 1', gci.nodes[nid(l2a)].depth == 1)
-check('callin main at depth 3', gci.nodes[nid(main)].depth == 3)
+local gci_main = find_by_name(gci, 'main')
+check('callin root rightmost', layci.boxes[nid(l2c)].col > (gci_main and layci.boxes[gci_main.id].col or -1))
+check('callin l2_a at depth 1', find_by_name(gci, 'func_l2_a').depth == 1)
+check('callin main at depth 3', gci_main and gci_main.depth == 3)
 
 -- ---- Test 6: depth limit + expand/collapse toggle
 local g3 = graph_mod.build(main, 'callout', { max_depth = 1 }, make_fetch(callees)).value
-check('depth1: l1_a has children', g3.nodes[nid(l1a)].has_children == true)
-check('depth1: l2_a hidden', g3.nodes[nid(l2a)].visible == false)
+local l1a3 = find_by_name(g3, 'func_l1_a')
+check('depth1: l1_a has children', l1a3 and l1a3.has_children == true)
+check('depth1: l2_a hidden', find_by_name(g3, 'func_l2_a').visible == false)
 check('depth1: max_visible_depth == 1', g3.max_visible_depth == 1)
-local g4 = graph_mod.expand(g3, g3.nodes[nid(l1a)], make_fetch(callees)).value
-check('expand reveals l2_a', g4 and g4.nodes[nid(l2a)].visible == true)
-local g5 = graph_mod.expand(g4, g4.nodes[nid(l1a)], make_fetch(callees)).value
-check('collapse hides l2_a', g5 and g5.nodes[nid(l2a)].visible == false)
+local g4 = graph_mod.expand(g3, g3.nodes[l1a3.id], make_fetch(callees)).value
+check('expand reveals l2_a', g4 and find_by_name(g4, 'func_l2_a').visible == true)
+local g5 = graph_mod.expand(g4, g4.nodes[l1a3.id], make_fetch(callees)).value
+check('collapse hides l2_a', g5 and find_by_name(g5, 'func_l2_a').visible == false)
 
 -- ---- Test 7: C call-site scanner (pure)
 local scanner = require('callgraph.scanner')
@@ -218,8 +236,8 @@ local c_node = { name = 'func', kind = 12, uri = 'file:///x.c', range = { start 
 local c_res = combined(c_node, 'callin').value
 check('standard result used when non-empty', c_res ~= nil and #c_res == 1 and c_res[1].item.name == 'main')
 
--- ---- Test 10: same-column edge (diamond at equal depth) draws a vertical arrow
--- main2 -> A, main2 -> B, A -> B: A and B both at depth 1, so A->B is same-column.
+-- ---- Test 10: diamond at equal depth — in tree mode A->B is a normal forward
+-- edge and B appears twice (via main2 and via A), with no vertical arrow.
 local A2 = item('func_a', 0)
 local B2 = item('func_b', 10)
 local main2 = item('main2', 20)
@@ -232,10 +250,14 @@ local gsc = graph_mod.build(main2, 'callout', { max_depth = 4 }, make_fetch(sc_c
 local laysc = layout_mod.layout(gsc, opts, { direction = 'callout', selected_id = nid(main2) })
 render_mod.render(buf, laysc, gsc, { selected_id = nid(main2), highlights = config.get().highlights })
 local txt3 = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), '\n')
-check('same-column edge drawn with vertical arrow', txt3:find('[▼▲]') ~= nil)
-check('same-column edge connects A->B', (function()
+check('tree: B appears twice (main2->B and A->B)', #find_all_by_name(gsc, 'func_b') == 2)
+-- Match the full UTF-8 sequences (Lua 5.1 char-class "[▼▲]" is byte-level and
+-- matches any box-drawing char containing 0xE2).
+check('tree: no same-column vertical arrow', txt3:find('▼') == nil and txt3:find('▲') == nil)
+check('tree: A->B is a forward edge', (function()
+  local a_node = find_by_name(gsc, 'func_a')
   for _, e in ipairs(laysc.edges) do
-    if e.arrow and (e.arrow.dir == 'd' or e.arrow.dir == 'u') then return true end
+    if e.arrow and e.arrow.dir == 'r' then return true end
   end
   return false
 end)())

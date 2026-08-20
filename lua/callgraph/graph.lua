@@ -1,10 +1,13 @@
---- Graph construction: build a deduplicated DAG from LSP call-hierarchy data.
+--- Graph construction: build a TREE from LSP call-hierarchy data — every call
+--- path expands into its own nodes (no dedup), so the same symbol called from
+--- different places appears once per path. This keeps the layout's edges
+--- crossing-free and the graph easy to read (see layout.lua).
 ---
 --- The graph is built in *render direction*: for callout the expansion edges
 --- follow the call direction (caller -> callee); for callin they follow the
---- reverse (callee -> caller). Nodes are identified by (uri, name, selection
---- range start) and merged (true DAG, min-depth placement). Cycles become
---- terminal leaf nodes carrying the cycle glyph instead of back-edges.
+--- reverse (callee -> caller). Nodes carry a path-qualified id and a stable
+--- `symbol_id` (uri + name + selection range start). Cycles become terminal
+--- leaf nodes carrying the cycle glyph instead of back-edges.
 ---
 --- The module is pure with respect to LSP: it receives a `fetch(node,
 --- direction)` function that returns a Deferred resolving to a list of
@@ -37,9 +40,14 @@ function M.node_id(item)
   })
 end
 
-local function new_node(graph, item, depth)
+--- Create a tree node. `id` is PATH-unique (parent path + symbol id) so the
+--- same symbol reached via different call paths becomes distinct boxes;
+--- `symbol_id` keeps the stable identity used for cycle detection.
+local function new_node(graph, item, depth, parent_id)
+  local sym_id = M.node_id(item)
   local n = {
-    id = M.node_id(item),
+    id = parent_id and (parent_id .. '\0' .. sym_id) or sym_id,
+    symbol_id = sym_id,
     -- Keep the original item verbatim: LSP call-hierarchy items carry an
     -- opaque `data` field that servers (clangd) require on later requests.
     item = item,
@@ -51,8 +59,8 @@ local function new_node(graph, item, depth)
     depth = depth,
     order = graph.next_order,
     children = {}, -- render-direction children (callout: callees; callin: callers)
-    parents = {}, -- opposite direction
-    call_site = nil, -- { uri, line } of the first arriving edge
+    parents = {}, -- single parent in tree mode
+    call_site = nil, -- { uri, line } of the single arriving edge
     children_fetched = false,
     has_children = false,
     is_cycle = false,
@@ -64,36 +72,20 @@ local function new_node(graph, item, depth)
 end
 
 local function add_edge(graph, parent, child, call_site)
-  local dup = false
-  for i = 1, #parent.children do
-    if parent.children[i] == child.id then dup = true; break end
-  end
-  if not dup then parent.children[#parent.children + 1] = child.id end
-
-  dup = false
-  for i = 1, #child.parents do
-    if child.parents[i] == parent.id then dup = true; break end
-  end
-  if not dup then
-    child.parents[#child.parents + 1] = parent.id
-    if not child.call_site and call_site then child.call_site = call_site end
-  end
+  parent.children[#parent.children + 1] = child.id
+  child.parents[#child.parents + 1] = parent.id
+  if not child.call_site and call_site then child.call_site = call_site end
 end
 
-local function first_parent(graph, node)
-  if #node.parents == 0 then return nil end
-  return graph.nodes[node.parents[1]]
-end
-
---- Whether `candidate_id` appears on the build path from `node` up to the root.
---- The first parent recorded is the path the BFS took, which is a valid
---- ancestor chain for cycle detection (see build_sync).
-local function is_ancestor(graph, node, candidate_id)
+--- Whether `symbol_id` appears on the call path from `node` up to the root
+--- (tree mode: follow the single parent chain).
+local function is_ancestor(graph, node, symbol_id)
   local cur = node
   local guard = 0
   while cur and guard < 100000 do
-    if cur.id == candidate_id then return true end
-    cur = first_parent(graph, cur)
+    if cur.symbol_id == symbol_id then return true end
+    local p = cur.parents[1]
+    cur = p and graph.nodes[p] or nil
     guard = guard + 1
   end
   return false
@@ -149,38 +141,33 @@ function M.build_sync(root, direction, opts, fetch)
       local calls = util.await(fetch(node, direction))
       local seen = {}
       for _, c in ipairs(calls) do
-        local cid = M.node_id(c.item)
-        if not seen[cid] then
-          seen[cid] = true
+        local sym_id = M.node_id(c.item)
+        if not seen[sym_id] then
+          seen[sym_id] = true
           node.has_children = true
-          local existing = graph.nodes[cid]
-          if existing then
-            if is_ancestor(graph, node, cid) then
-              -- Back-edge: close the cycle as a terminal leaf under `node`.
-              -- Give it a distinct id so it never collides with the original.
-              local cyc_key = cid .. '\0#cycle\0' .. node.id
-              if not graph.nodes[cyc_key] then
-                local cyc = new_node(graph, c.item, node.depth + 1)
-                cyc.id = cyc_key
-                cyc.is_cycle = true
-                cyc.cycle_of = existing.id
-                cyc.children_fetched = true
-                cyc.has_children = false
-                graph.nodes[cyc_key] = cyc
-                add_edge(graph, node, cyc, c.call_site)
-              end
-            else
-              -- Diamond: merge into the existing node, keep min depth.
-              add_edge(graph, node, existing, c.call_site)
-              if existing.depth > node.depth + 1 then
-                existing.depth = node.depth + 1
-              end
+          if is_ancestor(graph, node, sym_id) then
+            -- Back-edge: close the cycle as a terminal leaf under `node`.
+            local cyc_key = node.id .. '\0#cycle\0' .. sym_id
+            if not graph.nodes[cyc_key] then
+              local cyc = new_node(graph, c.item, node.depth + 1, node.id)
+              cyc.id = cyc_key
+              cyc.is_cycle = true
+              cyc.cycle_of = node.id
+              cyc.children_fetched = true
+              cyc.has_children = false
+              graph.nodes[cyc_key] = cyc
+              add_edge(graph, node, cyc, c.call_site)
             end
           else
-            local n = new_node(graph, c.item, node.depth + 1)
-            graph.nodes[cid] = n
-            add_edge(graph, node, n, c.call_site)
-            if n.depth <= max_depth then queue[#queue + 1] = n end
+            -- Tree mode: no dedup — each call path gets its own node.
+            local cid = node.id .. '\0' .. sym_id
+            if not graph.nodes[cid] then
+              local n = new_node(graph, c.item, node.depth + 1, node.id)
+              n.id = cid
+              graph.nodes[cid] = n
+              add_edge(graph, node, n, c.call_site)
+              if n.depth <= max_depth then queue[#queue + 1] = n end
+            end
           end
         end
       end
@@ -232,32 +219,32 @@ function M.expand_sync(graph, node, fetch)
       local calls = util.await(fetch(c, graph.direction))
       local seen = {}
       for _, cc in ipairs(calls) do
-        local ccid = M.node_id(cc.item)
-        if not seen[ccid] then
-          seen[ccid] = true
+        local sym_id = M.node_id(cc.item)
+        if not seen[sym_id] then
+          seen[sym_id] = true
           c.has_children = true
-          if graph.nodes[ccid] then
-            local existing = graph.nodes[ccid]
-            if is_ancestor(graph, c, ccid) then
-              local cyc_key = ccid .. '\0#cycle\0' .. c.id
-              if not graph.nodes[cyc_key] then
-                local cyc = new_node(graph, cc.item, c.depth + 1)
-                cyc.id = cyc_key
-                cyc.is_cycle = true
-                cyc.cycle_of = existing.id
-                cyc.children_fetched = true
-                cyc.has_children = false
-                graph.nodes[cyc_key] = cyc
-                add_edge(graph, c, cyc, cc.call_site)
-              end
-            else
-              add_edge(graph, c, existing, cc.call_site)
+          if is_ancestor(graph, c, sym_id) then
+            local cyc_key = c.id .. '\0#cycle\0' .. sym_id
+            if not graph.nodes[cyc_key] then
+              local cyc = new_node(graph, cc.item, c.depth + 1, c.id)
+              cyc.id = cyc_key
+              cyc.is_cycle = true
+              cyc.cycle_of = c.id
+              cyc.children_fetched = true
+              cyc.has_children = false
+              graph.nodes[cyc_key] = cyc
+              add_edge(graph, c, cyc, cc.call_site)
             end
           else
-            local n = new_node(graph, cc.item, c.depth + 1)
-            n.visible = false -- one level per expand
-            graph.nodes[ccid] = n
-            add_edge(graph, c, n, cc.call_site)
+            -- Tree mode: no dedup — each call path gets its own node.
+            local ccid = c.id .. '\0' .. sym_id
+            if not graph.nodes[ccid] then
+              local n = new_node(graph, cc.item, c.depth + 1, c.id)
+              n.id = ccid
+              n.visible = false -- one level per expand
+              graph.nodes[ccid] = n
+              add_edge(graph, c, n, cc.call_site)
+            end
           end
         end
       end

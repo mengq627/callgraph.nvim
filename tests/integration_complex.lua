@@ -70,14 +70,14 @@ util.async_start(function()
       end
       check('cycles marked (recursive / even<->odd)', cycles >= 1, 'cycles=' .. cycles)
 
-      -- diamond: `shared` is called by both alpha and beta (one node, 2 parents)
-      local shared = nil
+      -- diamond: tree mode — `shared` is reached via two paths (alpha and
+      -- beta), each with its own node and a single caller.
+      local shareds = {}
       for id, n in pairs(g.nodes) do
-        if n.name == 'shared' then shared = n end
+        if n.name == 'shared' then shareds[#shareds + 1] = n end
       end
-      check('diamond: shared reached', shared ~= nil)
-      check('diamond: shared has 2 callers (alpha,beta)', shared ~= nil and #shared.parents >= 2,
-        shared and tostring(#shared.parents) or 'nil')
+      check('diamond: shared reached twice (alpha & beta paths)', #shareds == 2, 'got ' .. #shareds)
+      check('diamond: each shared has 1 caller', shareds[1] ~= nil and #shareds[1].parents == 1 and #shareds[2].parents == 1)
 
       -- fan-out: fan calls both fan_a and fan_b
       local fan_node = nil

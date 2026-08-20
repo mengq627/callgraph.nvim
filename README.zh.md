@@ -43,10 +43,10 @@
 
 ## 特性
 
-- **真 DAG**：同一个函数全图只有一个框（按 `uri + 名字 + 定义位置` 去重），菱形结构共享节点。
+- **树形展开**：每个调用路径展开成自己的节点——同一函数被不同地方调用时按路径各出现一次（不去重），边不交叉、谁调谁一目了然。
 - **层级限制**：`max_depth` 默认 4（从根出发最多 4 条边）。边界节点折叠显示 `▸`，Enter/双击展开，`+`/`-` 调整深度。
 - **循环**：检测到回边时不再展开，函数名右侧显示带高亮的 **⟳** 终止节点，不画回边。
-- **去重 + 最小深度**：节点放在从根最短路径的那一层。
+- **连线不交叉**：行按子树连续分配，父→子边不会压过其他边。
 - **调用点标注**：框内显示调用点 `文件:行号`（`show_call_site` 可关）。
 - **长名截断**：超宽函数名截断为 `…`，光标悬停时在消息区显示完整路径。
 - **自动滚动**：移动选中框时，若函数框超出窗口可视范围，画布自动横向/纵向滚动让它保持可见。
@@ -144,7 +144,7 @@ lua/callgraph/
     cscope.lua    cscope 数据库查询（-dL -2/-3）
     ctags.lua     ctags（预留）
   lsp.lua       LSP 工具：根函数解析（prepareCallHierarchy + documentSymbol）、跳定义
-  graph.lua     建图：递归取数、去重、循环检测、深度裁剪（纯逻辑，注入 fetch）
+  graph.lua     建图：递归取数（树形、不去重）、循环检测、深度裁剪（纯逻辑，注入 fetch）
   scanner.lua   纯 C 调用点扫描器（跳过注释/字符串/预处理，返回调用 token）
   fallback.lua  启发式取数：callout 扫描函数体+解析调用点（含按名兜底），callin 用 references
   layout.lua    分层布局 + 正交边路由（纯函数）
@@ -172,7 +172,7 @@ nvim --headless -u NONE -l tests/cscope.lua            # cscope provider：输�
 nvim --headless -u NONE -l tests/integration_complex.lua # test_complex.c：菱形 / 循环 / fan-out / 深链
 ```
 
-`tests/smoke.lua` 覆盖：去重/最小深度/菱形共享、循环终止节点、callin 镜像、
+`tests/smoke.lua` 覆盖：树形展开（同一符号按路径各出现一次）、循环终止节点、callin 镜像、
 `max_depth` 边界折叠、展开/折叠切换、C 调用点扫描器、fallback 编排、同列边箭头。
 `tests/clean.c` 是格式良好的样例；`tests/test.c` 是"先调用后声明"的菱形结构样例。
 

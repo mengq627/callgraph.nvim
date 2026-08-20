@@ -55,13 +55,16 @@ end
 -- SAME layout the view renders, so the check is platform-independent (the
 -- character-grid columns differ across OSes / nvim builds when glyph widths
 -- are treated differently). Text rows are 2 (winbar lives on 'tabline').
-local layout = layout_mod.layout(
-  graph_mod.build(main, 'callout', { max_depth = 4 }, mock_fetch).value,
-  config.get(),
-  { direction = 'callout', selected_id = graph_mod.node_id(main) }
-)
+local graph = graph_mod.build(main, 'callout', { max_depth = 4 }, mock_fetch).value
+local layout = layout_mod.layout(graph, config.get(), { direction = 'callout', selected_id = graph_mod.node_id(main) })
+-- Tree mode: non-root nodes have path-qualified ids, so look them up by name.
+local function find_node(name)
+  for _, n in pairs(graph.nodes) do
+    if n.name == name then return n end
+  end
+end
 local function box_col(node)
-  return layout.boxes[graph_mod.node_id(node)].col
+  return layout.boxes[find_node(node.name).id].col
 end
 local expected = {
   { 2, box_col(main), 'm' }, -- main

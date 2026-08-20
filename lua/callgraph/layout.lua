@@ -71,34 +71,7 @@ local function add_forward_edge(edges, sb, tb)
   edges[#edges + 1] = { segments = segments, arrow = { row = R2, col = tgt_left - 1, dir = 'r' } }
 end
 
---- Same-column edge: straight vertical between the caller box and the callee
---- box (same column). The arrow always points INTO the callee; its direction
---- is derived from the relative rows so either stacking order renders correctly.
---- If a box sits between them the line passes behind it (edges are drawn
---- before boxes), acceptable for the rare same-column case.
-local function add_same_column_edge(edges, caller_box, callee_box)
-  local segments = {}
-  local ex = caller_box.col + math.floor(caller_box.width / 2)
-  if callee_box.row > caller_box.row then
-    -- callee below: vertical down, arrow ▼ into the callee's top border
-    local line_top = caller_box.row + caller_box.height
-    local line_bottom = callee_box.row - 2
-    if line_bottom >= line_top then
-      add_run(segments, line_top, ex, line_bottom, ex, 'v')
-    end
-    edges[#edges + 1] = { segments = segments, arrow = { row = callee_box.row - 1, col = ex, dir = 'd' } }
-  else
-    -- callee above: vertical up, arrow ▲ into the callee's bottom border
-    local line_top = caller_box.row - 1
-    local line_bottom = callee_box.row + callee_box.height + 1
-    if line_top >= line_bottom then
-      add_run(segments, line_bottom, ex, line_top, ex, 'v')
-    end
-    edges[#edges + 1] = { segments = segments, arrow = { row = callee_box.row + callee_box.height, col = ex, dir = 'u' } }
-  end
-end
-
---- Compute the full layout for a graph.
+--- Compute the full layout for a graph (tree mode).
 function M.layout(graph, opts, view_state)
   local win = opts.window
   local max_name_width = win.max_name_width
@@ -107,13 +80,6 @@ function M.layout(graph, opts, view_state)
   local row_gap = win.row_gap
   local col_gap = win.col_gap
 
-  -- Visible nodes in BFS discovery order.
-  local visible = {}
-  for id, n in pairs(graph.nodes) do
-    if n.visible then visible[#visible + 1] = n end
-  end
-  table.sort(visible, function(a, b) return a.order < b.order end)
-
   local max_depth = graph.max_visible_depth
   local function col_of(node)
     local d = node.depth
@@ -121,33 +87,34 @@ function M.layout(graph, opts, view_state)
     return d
   end
 
-  -- Per-node display text and marker positions.
+  -- Per-node display text and marker positions (iterate the tree, no sort).
   local texts = {}
-  for _, n in ipairs(visible) do
-    local name = util.truncate(n.name or '?', max_name_width)
-    local cycle_str = ''
-    if n.is_cycle then cycle_str = ' ⟳' end
-    local loc_str = ''
-    local label = text_label(graph, n, show_call_site, max_loc_width)
-    if label then loc_str = ' ' .. label end
-    local coll_str = ''
-    if n.has_children and not all_children_visible(graph, n) then coll_str = ' ▸' end
+  for id, n in pairs(graph.nodes) do
+    if n.visible then
+      local name = util.truncate(n.name or '?', max_name_width)
+      local cycle_str = ''
+      if n.is_cycle then cycle_str = ' ⟳' end
+      local loc_str = ''
+      local label = text_label(graph, n, show_call_site, max_loc_width)
+      if label then loc_str = ' ' .. label end
+      local coll_str = ''
+      if n.has_children and not all_children_visible(graph, n) then coll_str = ' ▸' end
 
-    local text = name .. cycle_str .. loc_str .. coll_str
-    texts[n.id] = { text = text, name_width = util.char_count(name) }
+      local text = name .. cycle_str .. loc_str .. coll_str
+      texts[n.id] = { text = text, name_width = util.char_count(name) }
+    end
   end
 
-  -- Group into columns and size each column.
-  local layers = {}
+  -- Size each depth column by its widest visible box.
   local col_width = {}
   local max_col = 0
-  for _, n in ipairs(visible) do
-    local c = col_of(n)
-    if c > max_col then max_col = c end
-    layers[c] = layers[c] or {}
-    layers[c][#layers[c] + 1] = n
-    local tw = util.char_count(texts[n.id].text)
-    col_width[c] = math.max(col_width[c] or 0, tw + 2)
+  for id, n in pairs(graph.nodes) do
+    if n.visible then
+      local c = col_of(n)
+      if c > max_col then max_col = c end
+      local tw = util.char_count(texts[id].text)
+      col_width[c] = math.max(col_width[c] or 0, tw + 2)
+    end
   end
 
   local col_x = {}
@@ -157,39 +124,67 @@ function M.layout(graph, opts, view_state)
     x = x + (col_width[c] or 0) + col_gap
   end
 
-  -- Stack boxes within each column, all columns starting at the top.
+  -- Tree layout: rows are assigned by a post-order DFS so each node's subtree
+  -- occupies a contiguous vertical band and sibling subtrees never overlap.
+  -- That keeps every parent->child L-shaped edge inside its own band — no
+  -- shared vertical channels, no crossings.
   local boxes = {}
   local max_bottom = 0
-  for c = 0, max_col do
-    local cy = 1
-    for _, n in ipairs(layers[c] or {}) do
-      local w = col_width[c] or 0
-      local t = texts[n.id]
-      boxes[n.id] = {
-        id = n.id,
-        row = cy,
-        col = col_x[c],
-        width = w,
-        height = BOX_H,
-        text = t.text,
-        text_width = util.char_count(t.text),
-        name_width = t.name_width,
-        -- Function-name span in 0-based buffer columns: [name_start, name_end).
-        -- Only the name is highlighted (not the trailing location label).
-        name_start = col_x[c],
-        name_end = col_x[c] + t.name_width,
-      }
-      if cy + BOX_H - 1 > max_bottom then max_bottom = cy + BOX_H - 1 end
-      cy = cy + BOX_H + row_gap
-    end
+  local y_cursor = 1
+  local function make_box(node, c, row)
+    local w = col_width[c] or 0
+    local t = texts[node.id]
+    local box = {
+      id = node.id,
+      row = row,
+      col = col_x[c],
+      width = w,
+      height = BOX_H,
+      text = t.text,
+      text_width = util.char_count(t.text),
+      name_width = t.name_width,
+      -- Function-name span in 0-based buffer columns: [name_start, name_end).
+      -- Only the name is highlighted (not the trailing location label).
+      name_start = col_x[c],
+      name_end = col_x[c] + t.name_width,
+    }
+    boxes[node.id] = box
+    if row + BOX_H - 1 > max_bottom then max_bottom = row + BOX_H - 1 end
+    return box
   end
+  local function place(node)
+    local children = {}
+    for _, cid in ipairs(node.children) do
+      local ch = graph.nodes[cid]
+      if ch and ch.visible then children[#children + 1] = ch end
+    end
+    local top, bottom
+    if #children == 0 then
+      top, bottom = y_cursor, y_cursor
+      y_cursor = y_cursor + BOX_H + row_gap
+    else
+      for _, ch in ipairs(children) do
+        local t, b = place(ch)
+        if not top then top = t end
+        bottom = b
+      end
+      -- Align the parent to its first child's top so its outgoing edges fan
+      -- top-down to every child.
+      top = boxes[children[1].id].row
+    end
+    make_box(node, col_of(node), top)
+    return top, bottom
+  end
+  place(graph.root)
 
   local gutter_row = max_bottom + 2
   local height = gutter_row + 1
   local width = x - col_gap + 1 -- right margin
   if width < 1 then width = 1 end
 
-  -- Route edges between visible pairs. The left box is always the source.
+  -- Route edges: parent -> child between adjacent columns. For callin the
+  -- parent (deeper) sits right of its callers, so swap to keep the left box
+  -- as the source of the L-shaped edge.
   local edges = {}
   for id, n in pairs(graph.nodes) do
     if n.visible then
@@ -198,20 +193,11 @@ function M.layout(graph, opts, view_state)
         if c and c.visible then
           local s, t = n, c
           local sb, tb = boxes[s.id], boxes[t.id]
-          if sb.col > tb.col then s, t = t, s; sb, tb = tb, sb end
-          if sb.col < tb.col then
-            add_forward_edge(edges, sb, tb)
-          else
-            -- same column: sb is the parent box, tb the child box. The callee
-            -- is the child for callout, the parent for callin (its children
-            -- are callers).
-            local caller_box, callee_box
-            if graph.direction == 'callout' then
-              caller_box, callee_box = sb, tb
-            else
-              caller_box, callee_box = tb, sb
+          if sb and tb then
+            if sb.col > tb.col then s, t = t, s; sb, tb = tb, sb end
+            if sb.col < tb.col then
+              add_forward_edge(edges, sb, tb)
             end
-            add_same_column_edge(edges, caller_box, callee_box)
           end
         end
       end
