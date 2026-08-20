@@ -53,9 +53,10 @@ local function add_forward_edge(edges, sb, tb)
       add_run(segments, R1, src_right + 1, R1, tgt_left - 2, 'h')
     end
   else
-    -- Hug the source side: a same-row (straight) edge then runs continuously
-    -- from this branch point to the target instead of being split by a
-    -- mid-gap vertical channel (which made the corner look like an extra stub).
+    -- Vertical channel near the source: a same-row (straight) edge runs
+    -- continuously from the branch point to the target. (The junction glyphs
+    -- were previously swapped in render.lua, which made the branch stub stick
+    -- out left of the vertical line — that is fixed there.)
     local xj = src_right + 2
     if xj > tgt_left - 3 then xj = tgt_left - 3 end
     if xj >= src_right + 1 then
