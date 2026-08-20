@@ -143,6 +143,19 @@ require('callgraph').setup({
 })
 ```
 
+### 颜色模式
+
+`colors.mode` 控制画布配色：
+
+| `off`（默认终端色） | `auto`（镜像代码区） |
+|---|---|
+| ![off](assets/off_colors.png) | ![auto](assets/auto_colors.png) |
+
+- **off**：纯终端色——边框、文本、连线都用默认调色板。
+- **auto**：镜像代码区——函数名跟随 `@function`、文件:行号跟随 `Comment`、
+  内联符号（⟳ / ❯）跟随 `@keyword`、背景跟随 `Normal`、边框蓝紫、连线白。
+- **custom**：使用上面 `colors.*` 的显式颜色。
+
 ## 架构
 
 ```

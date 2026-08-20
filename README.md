@@ -146,6 +146,18 @@ require('callgraph').setup({
 })
 ```
 
+### Color modes
+
+`colors.mode` controls how the canvas is colored:
+
+| `off` (default terminal colors) | `auto` (mirrors the code area) |
+|---|---|
+| ![off](assets/off_colors.png) | ![auto](assets/auto_colors.png) |
+
+- **off**: plain terminal colors — borders, text and connection lines all use the default palette.
+- **auto**: mirrors the code area — function name follows `@function`, `file:line` follows `Comment`, inline markers (⟳ / ❯) follow `@keyword`, background follows `Normal`, borders are bluish purple, edges white.
+- **custom**: use the `colors.*` values above.
+
 ## Architecture
 
 ```
