@@ -106,7 +106,7 @@ require('callgraph').setup({
     max_name_width = 26,     -- 函数名截断长度
     max_loc_width = 22,      -- 位置标注截断长度
     arrows = { right='', down='', up='', left='' }, -- Nerd Font 箭头
-    collapse_marker = '▶',  -- 可展开标记：'▶' 大 | '▸' 小 | '▷' 空心 | '❯' 粗
+    collapse_marker = '❯',  -- 可展开标记：'❯' 粗 | '▶' 大 | '▸' 小 | '▷' 空心
   },
   highlights = {
     focus = 'CallgraphFocus',       -- 选中函数名颜色（默认绿）
@@ -119,7 +119,7 @@ require('callgraph').setup({
     -- 画布颜色：'off'（默认终端色）| 'auto'（镜像代码区：函数名 <- @function、
     -- 文件:行号 <- Comment、背景 <- Normal；连线白色、边框蓝紫）
     -- | 'custom'（用下面的颜色）
-    mode = 'off',
+    mode = 'auto',
     func = '#98c379',    -- 函数名（custom）
     location = '#5c6370', -- 文件:行号（custom）
     border = '#9d7cd8',  -- 函数边框（custom）

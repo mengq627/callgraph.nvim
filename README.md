@@ -108,7 +108,7 @@ require('callgraph').setup({
     max_name_width = 26,     -- function name truncation
     max_loc_width = 22,      -- location label truncation
     arrows = { right='', down='', up='', left='' }, -- Nerd Font arrows
-    collapse_marker = '▶',  -- expandable marker: '▶' large | '▸' small | '▷' outline | '❯' thick
+    collapse_marker = '❯',  -- expandable marker: '❯' thick | '▶' large | '▸' small | '▷' outline
   },
   highlights = {
     focus = 'CallgraphFocus',       -- focused function name color (default green)
@@ -122,7 +122,7 @@ require('callgraph').setup({
     -- area: function name <- @function, file:line <- Comment, background <-
     -- Normal; edges white, borders bluish purple) | 'custom' (use the colors
     -- below).
-    mode = 'off',
+    mode = 'auto',
     func = '#98c379',    -- function / symbol name (custom)
     location = '#5c6370', -- file:line label (custom)
     border = '#9d7cd8',  -- box border (custom)

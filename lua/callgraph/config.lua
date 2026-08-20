@@ -51,7 +51,7 @@ M.defaults = {
     -- Collapsible-marker glyph (shown next to a node that can be expanded).
     -- Alternatives: '▸' (small) / '▶' (large solid) / '▷' (large outline) /
     -- '❯' (thick) / '»' (double angle).
-    collapse_marker = '▶',
+    collapse_marker = '❯',
   },
   highlights = {
     focus = 'CallgraphFocus', -- selected box text color (used when highlight = true)
@@ -70,7 +70,7 @@ M.defaults = {
   --             purple.
   --   custom  : use the explicit colors below.
   colors = {
-    mode = 'off',
+    mode = 'auto',
     func = '#98c379',    -- function / symbol name
     location = '#5c6370', -- file:line label
     border = '#9d7cd8',  -- box border (bluish purple)
