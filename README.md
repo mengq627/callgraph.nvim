@@ -172,6 +172,7 @@ nvim --headless -u NONE -l tests/integration.lua       # real clangd: clean.c ca
 nvim --headless -u NONE -l tests/integration_testc.lua # real clangd: test.c name-match fallback
 nvim --headless -u NONE -l tests/integration_lsp.lua   # clangd ≥ 20: pure-LSP callout 4 levels + callin
 nvim --headless -u NONE -l tests/cscope.lua            # cscope provider: output parse / index discovery / availability
+nvim --headless -u NONE -l tests/integration_complex.lua # test_complex.c: diamond / cycles / fan-out / deep chain
 ```
 
 `tests/smoke.lua` covers: dedup/min-depth/diamond sharing, cycle terminals, callin mirror,
