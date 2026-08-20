@@ -125,9 +125,19 @@ function M.resolve_colors()
     return { func = c.func, location = c.location, border = c.border, edge = c.edge, focus = c.focus }
   end
   -- auto: mirror the code area's syntax colors.
+  -- Follow highlight link chains (e.g. @function -> Function -> Identifier) so
+  -- a group whose fg comes via a link resolves to the actual color.
   local function fg(name)
-    local hl = vim.api.nvim_get_hl(0, { name = name })
-    return hl.fg
+    local seen = {}
+    local cur = name
+    for _ = 1, 30 do
+      local hl = vim.api.nvim_get_hl(0, { name = cur })
+      if hl.fg then return hl.fg end
+      if not hl.link or seen[hl.link] then return nil end
+      seen[cur] = true
+      cur = hl.link
+    end
+    return nil
   end
   local normal = vim.api.nvim_get_hl(0, { name = 'Normal' })
   local fn = fg('@function') or fg('Function') or '#ffffff'
