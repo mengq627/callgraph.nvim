@@ -68,11 +68,16 @@ function M.query(funcname, direction, opts)
   -- prepended), so parsing yields jumpable uris.
   local cmd = { 'cscope', '-dL', op, funcname, '-f', db, '-P', db_dir }
   vim.system(cmd, { text = true }, function(proc)
-    if proc.code ~= 0 then
-      d:resolve({})
-      return
-    end
-    d:resolve(M.parse_output(proc.stdout))
+    -- vim.system's on_exit runs in a fast-event context where UI calls (e.g.
+    -- vim.notify via the resolved Deferred chain) are forbidden — defer to the
+    -- main loop so the await/notify path is safe.
+    vim.schedule(function()
+      if proc.code ~= 0 then
+        d:resolve({})
+        return
+      end
+      d:resolve(M.parse_output(proc.stdout))
+    end)
   end)
   return d
 end
