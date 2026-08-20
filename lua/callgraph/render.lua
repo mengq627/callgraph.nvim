@@ -192,16 +192,18 @@ function M.render(buf, layout, graph, view)
   if view.colors then
     local group_map = { border = 'CallgraphBorder', func = 'CallgraphFunc', loc = 'CallgraphLocation', edge = 'CallgraphEdge' }
     for line, list in pairs(spans) do
-      local line_text = lines[line + 1] or ''
+      -- spans key on 1-based grid rows; extmarks use 0-based buffer rows.
+      local line_text = lines[line] or ''
       for _, sp in ipairs(list) do
         local g = group_map[sp.group]
         if g then
           if sp.group == 'func' and sp.sel == view.selected_id then
             g = 'CallgraphFocus'
           end
-          local byte0 = util.char_to_byte(line_text, sp.c0)
-          local byte1 = util.char_to_byte(line_text, sp.c1 + 1)
-          vim.api.nvim_buf_set_extmark(buf, M.ns, line, byte0, { end_col = byte1, hl_group = g })
+          -- spans use 1-based layout columns; char_to_byte is 0-based.
+          local byte0 = util.char_to_byte(line_text, sp.c0 - 1)
+          local byte1 = util.char_to_byte(line_text, sp.c1)
+          vim.api.nvim_buf_set_extmark(buf, M.ns, line - 1, byte0, { end_col = byte1, hl_group = g })
         end
       end
     end
