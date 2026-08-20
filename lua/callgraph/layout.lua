@@ -53,8 +53,11 @@ local function add_forward_edge(edges, sb, tb)
       add_run(segments, R1, src_right + 1, R1, tgt_left - 2, 'h')
     end
   else
-    local xj = tgt_left - 3
-    if xj < src_right + 1 then xj = src_right + 1 end
+    -- Hug the source side: a same-row (straight) edge then runs continuously
+    -- from this branch point to the target instead of being split by a
+    -- mid-gap vertical channel (which made the corner look like an extra stub).
+    local xj = src_right + 2
+    if xj > tgt_left - 3 then xj = tgt_left - 3 end
     if xj >= src_right + 1 then
       add_run(segments, R1, src_right + 1, R1, xj, 'h')
     end
