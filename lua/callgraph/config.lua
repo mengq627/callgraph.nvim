@@ -59,6 +59,20 @@ M.defaults = {
     tab_active = 'CallgraphTabActive', -- current tab label on the tabline
     tab_inactive = 'CallgraphTabInactive', -- other tab labels on the tabline
   },
+  -- Canvas colors. `mode`:
+  --   off     : default terminal colors (current behavior)
+  --   auto    : mirror the code area — function name <- @function, file:line
+  --             <- Comment, background <- Normal; edges white, borders bluish
+  --             purple.
+  --   custom  : use the explicit colors below.
+  colors = {
+    mode = 'off',
+    func = '#98c379',    -- function / symbol name
+    location = '#5c6370', -- file:line label
+    border = '#9d7cd8',  -- box border (bluish purple)
+    edge = '#ffffff',    -- connection lines
+    focus = '#98c379',   -- focused function name
+  },
   -- All in-view keymaps. Set an entry to '' to disable that binding.
   keymaps = {
     move_left = 'h',
@@ -99,6 +113,45 @@ end
 function M.update(opts)
   M.merged = M.merged or vim.deepcopy(M.defaults)
   M.merged = vim.tbl_deep_extend('force', M.merged, opts or {})
+end
+
+--- Resolve the canvas color set for the current `colors.mode`.
+--- Returns nil when `off` (default terminal colors), otherwise a table with
+--- func/location/border/edge/focus (and bg for `auto`).
+function M.resolve_colors()
+  local c = M.get().colors
+  if not c or c.mode == 'off' then return nil end
+  if c.mode == 'custom' then
+    return { func = c.func, location = c.location, border = c.border, edge = c.edge, focus = c.focus }
+  end
+  -- auto: mirror the code area's syntax colors.
+  local function fg(name)
+    local hl = vim.api.nvim_get_hl(0, { name = name })
+    return hl.fg
+  end
+  local normal = vim.api.nvim_get_hl(0, { name = 'Normal' })
+  local fn = fg('@function') or fg('Function') or '#ffffff'
+  return {
+    func = fn,
+    focus = fn,
+    location = fg('Comment') or '#888888',
+    border = '#9d7cd8', -- bluish purple
+    edge = '#ffffff',
+    bg = normal.bg,
+  }
+end
+
+--- Apply the resolved colors as highlight groups (call whenever the view
+--- renders, so `auto` picks up the current colorscheme).
+function M.apply_colors()
+  local colors = M.resolve_colors()
+  if not colors then return end
+  vim.api.nvim_set_hl(0, 'CallgraphFunc', { fg = colors.func })
+  vim.api.nvim_set_hl(0, 'CallgraphLocation', { fg = colors.location })
+  vim.api.nvim_set_hl(0, 'CallgraphBorder', { fg = colors.border })
+  vim.api.nvim_set_hl(0, 'CallgraphEdge', { fg = colors.edge })
+  vim.api.nvim_set_hl(0, 'CallgraphFocus', { fg = colors.focus })
+  if colors.bg then vim.api.nvim_set_hl(0, 'CallgraphNormal', { bg = colors.bg }) end
 end
 
 --- Define highlight groups. `default = true` lets a colorscheme override them.

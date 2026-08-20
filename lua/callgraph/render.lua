@@ -43,7 +43,17 @@ local function put(grid, r, c, ch)
   if row and c <= #row then row[c] = ch end
 end
 
-local function draw_box(grid, b)
+-- Record a color span on `line` covering cols [c0, c1] with a group key
+-- ('border' | 'func' | 'loc' | 'edge'). `sel` carries the box id when the span
+-- is the focused box's function name (so it can be recolored on selection).
+local function add_span(spans, line, c0, c1, group, sel)
+  if not spans then return end
+  local s = spans[line]
+  if not s then s = {}; spans[line] = s end
+  s[#s + 1] = { c0 = c0, c1 = c1, group = group, sel = sel }
+end
+
+local function draw_box(grid, b, spans)
   local r, c, w = b.row, b.col, b.width
   local top, bottom = r, r + BOX_H - 1
 
@@ -57,6 +67,16 @@ local function draw_box(grid, b)
   end
   put(grid, r + 1, c, '│')
   put(grid, r + 1, c + w - 1, '│')
+  if spans then
+    add_span(spans, top, c, c + w - 1, 'border')
+    add_span(spans, bottom, c, c + w - 1, 'border')
+    add_span(spans, r + 1, c, c, 'border')
+    add_span(spans, r + 1, c + w - 1, c + w - 1, 'border')
+    add_span(spans, r + 1, c + 1, c + b.name_width, 'func', b.id)
+    if c + w - 2 > c + b.name_width then
+      add_span(spans, r + 1, c + b.name_width + 1, c + w - 2, 'loc')
+    end
+  end
 
   -- Box text (text row), one character per grid cell.
   local text = b.text
@@ -88,6 +108,7 @@ function M.render(buf, layout, graph, view)
   local W = math.max(layout.width, 1)
   local H = math.max(layout.height, 1)
   local grid = make_grid(H, W)
+  local spans = {} -- line -> { {c0,c1,group,sel}, ... } for the colors mode
 
   -- Edges first. Build a per-cell connection mask (1=N, 2=S, 4=W, 8=E) from
   -- all axis-aligned runs, then render the correct box-drawing glyph per cell
@@ -123,7 +144,9 @@ function M.render(buf, layout, graph, view)
       m = (hints[k] == 'v') and 3 or 12
     end
     local rr, cc = k:match('^(%d+),(%d+)$')
-    put(grid, tonumber(rr), tonumber(cc), GLYPH[m])
+    rr, cc = tonumber(rr), tonumber(cc)
+    put(grid, rr, cc, GLYPH[m])
+    add_span(spans, rr, cc, cc, 'edge')
   end
 
   -- Arrowheads: glyphs come from `view.arrows` (config `window.arrows`) so
@@ -133,12 +156,13 @@ function M.render(buf, layout, graph, view)
     if e.arrow then
       local ch = (e.arrow.dir == 'd' and arrows.down) or (e.arrow.dir == 'u' and arrows.up) or (e.arrow.dir == 'l' and arrows.left) or arrows.right
       put(grid, e.arrow.row, e.arrow.col, ch)
+      add_span(spans, e.arrow.row, e.arrow.col, e.arrow.col, 'edge')
     end
   end
 
   -- Boxes on top.
   for _, b in pairs(layout.boxes) do
-    draw_box(grid, b)
+    draw_box(grid, b, spans)
   end
 
   -- Tab labels live on the native 'tabline' (see view.update_tabline), so the
@@ -160,6 +184,28 @@ function M.render(buf, layout, graph, view)
     local line_text = lines[b.row + 1] or ''
     local byte_col = util.char_to_byte(line_text, b.col)
     layout.box_marks[id] = vim.api.nvim_buf_set_extmark(buf, M.anchor_ns, b.row, byte_col, {})
+  end
+
+  -- Colors mode: color every part (borders, function names, locations, edges)
+  -- and recolor the focused box's name. Falls back to the legacy highlight path
+  -- (focus + dim location) when colors are off.
+  if view.colors then
+    local group_map = { border = 'CallgraphBorder', func = 'CallgraphFunc', loc = 'CallgraphLocation', edge = 'CallgraphEdge' }
+    for line, list in pairs(spans) do
+      local line_text = lines[line + 1] or ''
+      for _, sp in ipairs(list) do
+        local g = group_map[sp.group]
+        if g then
+          if sp.group == 'func' and sp.sel == view.selected_id then
+            g = 'CallgraphFocus'
+          end
+          local byte0 = util.char_to_byte(line_text, sp.c0)
+          local byte1 = util.char_to_byte(line_text, sp.c1 + 1)
+          vim.api.nvim_buf_set_extmark(buf, M.ns, line, byte0, { end_col = byte1, hl_group = g })
+        end
+      end
+    end
+    return
   end
 
   -- Highlighting is opt-in and defaults to off. When off, no highlight code

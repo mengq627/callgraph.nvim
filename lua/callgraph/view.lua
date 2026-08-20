@@ -199,12 +199,21 @@ function M.render_view()
   })
   tab.last_layout = layout
 
+  -- Resolve canvas colors each render so `auto` picks up the colorscheme, and
+  -- mirror the code area's background onto this window.
+  local colors = config.resolve_colors()
+  config.apply_colors()
+  if colors and colors.bg then
+    vim.wo[state.win].winhighlight = 'Normal:CallgraphNormal'
+  end
+
   M.resize_window(opts)
   render_mod.render(state.buf, layout, tab.graph, {
     selected_id = tab.selected_id,
     highlight = opts.highlight,
     highlights = opts.highlights,
     arrows = opts.window.arrows,
+    colors = colors,
   })
   update_winbar()
   M.focus_selected()

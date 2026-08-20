@@ -116,6 +116,18 @@ require('callgraph').setup({
     tab_active = 'CallgraphTabActive',     -- current tab label
     tab_inactive = 'CallgraphTabInactive', -- other tab labels
   },
+  colors = {
+    -- Canvas colors: 'off' (default terminal colors) | 'auto' (mirror the code
+    -- area: function name <- @function, file:line <- Comment, background <-
+    -- Normal; edges white, borders bluish purple) | 'custom' (use the colors
+    -- below).
+    mode = 'off',
+    func = '#98c379',    -- function / symbol name (custom)
+    location = '#5c6370', -- file:line label (custom)
+    border = '#9d7cd8',  -- box border (custom)
+    edge = '#ffffff',    -- connection lines (custom)
+    focus = '#98c379',   -- focused function name (custom)
+  },
   keymaps = {               -- all remappable; set to '' to disable
     move_left = 'h', move_down = 'j', move_up = 'k', move_right = 'l',
     move_left_alt = '<Left>', move_down_alt = '<Down>',

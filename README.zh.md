@@ -114,6 +114,17 @@ require('callgraph').setup({
     tab_active = 'CallgraphTabActive',     -- 当前 tab 标签
     tab_inactive = 'CallgraphTabInactive', -- 其他 tab 标签
   },
+  colors = {
+    -- 画布颜色：'off'（默认终端色）| 'auto'（镜像代码区：函数名 <- @function、
+    -- 文件:行号 <- Comment、背景 <- Normal；连线白色、边框蓝紫）
+    -- | 'custom'（用下面的颜色）
+    mode = 'off',
+    func = '#98c379',    -- 函数名（custom）
+    location = '#5c6370', -- 文件:行号（custom）
+    border = '#9d7cd8',  -- 函数边框（custom）
+    edge = '#ffffff',    -- 连线（custom）
+    focus = '#98c379',   -- 选中函数名（custom）
+  },
   keymaps = {               -- 全部可重映射；设为 '' 禁用
     move_left = 'h', move_down = 'j', move_up = 'k', move_right = 'l',
     move_left_alt = '<Left>', move_down_alt = '<Down>',
