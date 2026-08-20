@@ -53,7 +53,7 @@ local function add_span(spans, line, c0, c1, group, sel)
   s[#s + 1] = { c0 = c0, c1 = c1, group = group, sel = sel }
 end
 
-local function draw_box(grid, b, spans)
+local function draw_box(grid, b, spans, collapse_marker)
   local r, c, w = b.row, b.col, b.width
   local top, bottom = r, r + BOX_H - 1
 
@@ -105,7 +105,7 @@ local function draw_box(grid, b, spans)
       local grp
       if char_index <= b.name_width then
         grp = 'func'
-      elseif char == '⟳' or char == '▸' then
+      elseif char == '⟳' or (collapse_marker and char == collapse_marker) then
         grp = 'symbol'
       else
         grp = 'loc'
@@ -180,7 +180,7 @@ function M.render(buf, layout, graph, view)
 
   -- Boxes on top.
   for _, b in pairs(layout.boxes) do
-    draw_box(grid, b, spans)
+    draw_box(grid, b, spans, view.collapse_marker)
   end
 
   -- Tab labels live on the native 'tabline' (see view.update_tabline), so the

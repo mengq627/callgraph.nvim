@@ -108,6 +108,7 @@ require('callgraph').setup({
     max_name_width = 26,     -- function name truncation
     max_loc_width = 22,      -- location label truncation
     arrows = { right='', down='', up='', left='' }, -- Nerd Font arrows
+    collapse_marker = '▶',  -- expandable marker: '▶' large | '▸' small | '▷' outline | '❯' thick
   },
   highlights = {
     focus = 'CallgraphFocus',       -- focused function name color (default green)

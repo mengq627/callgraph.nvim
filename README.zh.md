@@ -106,6 +106,7 @@ require('callgraph').setup({
     max_name_width = 26,     -- 函数名截断长度
     max_loc_width = 22,      -- 位置标注截断长度
     arrows = { right='', down='', up='', left='' }, -- Nerd Font 箭头
+    collapse_marker = '▶',  -- 可展开标记：'▶' 大 | '▸' 小 | '▷' 空心 | '❯' 粗
   },
   highlights = {
     focus = 'CallgraphFocus',       -- 选中函数名颜色（默认绿）

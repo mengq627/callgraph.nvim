@@ -213,6 +213,7 @@ function M.render_view()
     highlight = opts.highlight,
     highlights = opts.highlights,
     arrows = opts.window.arrows,
+    collapse_marker = opts.window.collapse_marker,
     colors = colors,
   })
   update_winbar()

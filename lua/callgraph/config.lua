@@ -48,6 +48,10 @@ M.defaults = {
     --   { right='➡', down='⬇', up='⬆', left='⬅' }   -- heavy Unicode arrows (no Nerd Font)
     --   { right='→', down='↓', up='↑', left='←' }   -- Unicode shaft arrows (no Nerd Font)
     arrows = { right = '', down = '', up = '', left = '' },
+    -- Collapsible-marker glyph (shown next to a node that can be expanded).
+    -- Alternatives: '▸' (small) / '▶' (large solid) / '▷' (large outline) /
+    -- '❯' (thick) / '»' (double angle).
+    collapse_marker = '▶',
   },
   highlights = {
     focus = 'CallgraphFocus', -- selected box text color (used when highlight = true)
