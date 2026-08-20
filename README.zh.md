@@ -124,6 +124,7 @@ require('callgraph').setup({
     border = '#9d7cd8',  -- 函数边框（custom）
     edge = '#ffffff',    -- 连线（custom）
     focus = '#98c379',   -- 选中函数名（custom）
+    symbol = '#e5c07b',  -- 内联符号 ⟳ 循环 / ▸ 可折叠（custom）
   },
   keymaps = {               -- 全部可重映射；设为 '' 禁用
     move_left = 'h', move_down = 'j', move_up = 'k', move_right = 'l',

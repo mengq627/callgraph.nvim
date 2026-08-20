@@ -127,6 +127,7 @@ require('callgraph').setup({
     border = '#9d7cd8',  -- box border (custom)
     edge = '#ffffff',    -- connection lines (custom)
     focus = '#98c379',   -- focused function name (custom)
+    symbol = '#e5c07b',  -- inline markers ⟳ cycle / ▸ collapsible (custom)
   },
   keymaps = {               -- all remappable; set to '' to disable
     move_left = 'h', move_down = 'j', move_up = 'k', move_right = 'l',

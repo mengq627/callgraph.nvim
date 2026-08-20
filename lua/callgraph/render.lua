@@ -72,17 +72,21 @@ local function draw_box(grid, b, spans)
     add_span(spans, bottom, c, c + w - 1, 'border')
     add_span(spans, r + 1, c, c, 'border')
     add_span(spans, r + 1, c + w - 1, c + w - 1, 'border')
-    add_span(spans, r + 1, c + 1, c + b.name_width, 'func', b.id)
-    if c + w - 2 > c + b.name_width then
-      add_span(spans, r + 1, c + b.name_width + 1, c + w - 2, 'loc')
-    end
   end
 
-  -- Box text (text row), one character per grid cell.
+  -- Box text (text row): name, inline markers (⟳ / ▸), then the location label.
+  -- Each part gets its own span so markers can follow the keyword color.
   local text = b.text
   local col = c + 1
   local last = c + w - 2
   local i, n = 1, #text
+  local char_index = 0
+  local span_start, span_grp
+  local function flush_span()
+    if spans and span_start and span_grp then
+      add_span(spans, r + 1, span_start, col - 1, span_grp, (span_grp == 'func') and b.id or nil)
+    end
+  end
   while i <= n do
     local byte = string.byte(text, i)
     local char
@@ -97,9 +101,23 @@ local function draw_box(grid, b, spans)
     end
     if col <= last then
       grid[r + 1][col] = char
+      char_index = char_index + 1
+      local grp
+      if char_index <= b.name_width then
+        grp = 'func'
+      elseif char == '⟳' or char == '▸' then
+        grp = 'symbol'
+      else
+        grp = 'loc'
+      end
+      if spans and grp ~= span_grp then
+        flush_span()
+        span_start, span_grp = col, grp
+      end
       col = col + 1
     end
   end
+  flush_span()
 end
 
 --- Render `layout` into `buf`.
@@ -190,7 +208,7 @@ function M.render(buf, layout, graph, view)
   -- and recolor the focused box's name. Falls back to the legacy highlight path
   -- (focus + dim location) when colors are off.
   if view.colors then
-    local group_map = { border = 'CallgraphBorder', func = 'CallgraphFunc', loc = 'CallgraphLocation', edge = 'CallgraphEdge' }
+    local group_map = { border = 'CallgraphBorder', func = 'CallgraphFunc', loc = 'CallgraphLocation', edge = 'CallgraphEdge', symbol = 'CallgraphSymbol' }
     for line, list in pairs(spans) do
       -- spans key on 1-based grid rows; extmarks use 0-based buffer rows.
       local line_text = lines[line] or ''

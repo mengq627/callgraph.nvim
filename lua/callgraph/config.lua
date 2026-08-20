@@ -72,6 +72,7 @@ M.defaults = {
     border = '#9d7cd8',  -- box border (bluish purple)
     edge = '#ffffff',    -- connection lines
     focus = '#98c379',   -- focused function name
+    symbol = '#e5c07b',  -- inline markers (⟳ cycle, ▸ collapsible); keyword color in auto
   },
   -- All in-view keymaps. Set an entry to '' to disable that binding.
   keymaps = {
@@ -122,7 +123,10 @@ function M.resolve_colors()
   local c = M.get().colors
   if not c or c.mode == 'off' then return nil end
   if c.mode == 'custom' then
-    return { func = c.func, location = c.location, border = c.border, edge = c.edge, focus = c.focus }
+    return {
+      func = c.func, location = c.location, border = c.border,
+      edge = c.edge, focus = c.focus, symbol = c.symbol,
+    }
   end
   -- auto: mirror the code area's syntax colors.
   -- Follow highlight link chains (e.g. @function -> Function -> Identifier) so
@@ -147,6 +151,7 @@ function M.resolve_colors()
     location = fg('Comment') or '#888888',
     border = '#9d7cd8', -- bluish purple
     edge = '#ffffff',
+    symbol = fg('@keyword') or fg('Keyword') or '#e5c07b', -- markers follow keywords
     bg = normal.bg,
   }
 end
@@ -161,6 +166,7 @@ function M.apply_colors()
   vim.api.nvim_set_hl(0, 'CallgraphBorder', { fg = colors.border })
   vim.api.nvim_set_hl(0, 'CallgraphEdge', { fg = colors.edge })
   vim.api.nvim_set_hl(0, 'CallgraphFocus', { fg = colors.focus })
+  vim.api.nvim_set_hl(0, 'CallgraphSymbol', { fg = colors.symbol })
   if colors.bg then vim.api.nvim_set_hl(0, 'CallgraphNormal', { bg = colors.bg }) end
 end
 
