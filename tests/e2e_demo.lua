@@ -76,9 +76,9 @@ if view.state then
   pause('Step 6/6: 空格展开 / 折叠', 2500)
 end
 
-pause(interactive and '演示结束，窗口即将关闭' or 'DEMO done', 2500)
-if interactive then
-  vim.cmd('qa')
-else
+pause(interactive and '演示结束，窗口保持打开（输入 :qa 关闭）' or 'DEMO done', 2500)
+if not interactive then
   os.exit(0)
 end
+-- With a real UI: leave the window open so the user can inspect it, then quit
+-- manually with :qa. Used via `nvim-qt -u NONE -c "lua dofile('...e2e_demo.lua')"`.
