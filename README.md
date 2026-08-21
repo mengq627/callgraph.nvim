@@ -200,6 +200,8 @@ nvim --headless -u NONE -l tests/integration_testc.lua # real clangd: test.c nam
 nvim --headless -u NONE -l tests/integration_lsp.lua   # clangd ≥ 20: pure-LSP callout 4 levels + callin
 nvim --headless -u NONE -l tests/cscope.lua            # cscope provider: output parse / index discovery / availability
 nvim --headless -u NONE -l tests/integration_complex.lua # test_complex.c: diamond / cycles / fan-out / deep chain
+nvim --headless -u NONE -l tests/e2e_callout.lua         # end-to-end: open file, place cursor, run :Callout (CI)
+nvim -u NONE -l tests/e2e_callout.lua                    # same, but with a real window — watch it run
 ```
 
 `tests/smoke.lua` covers: tree expansion (a symbol appears once per call path), cycle terminals, callin mirror,

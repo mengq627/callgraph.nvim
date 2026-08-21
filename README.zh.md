@@ -197,6 +197,8 @@ nvim --headless -u NONE -l tests/integration_testc.lua # 真 clangd：test.c 先
 nvim --headless -u NONE -l tests/integration_lsp.lua   # clangd ≥ 20：纯 LSP callout 4 层 + callin
 nvim --headless -u NONE -l tests/cscope.lua            # cscope provider：输出解析 / 索引发现 / 可用性探测
 nvim --headless -u NONE -l tests/integration_complex.lua # test_complex.c：菱形 / 循环 / fan-out / 深链
+nvim --headless -u NONE -l tests/e2e_callout.lua         # 端到端：打开文件、定位光标、执行 :Callout（CI）
+nvim -u NONE -l tests/e2e_callout.lua                    # 同上，但带真实窗口——可观看运行过程
 ```
 
 `tests/smoke.lua` 覆盖：树形展开（同一符号按路径各出现一次）、循环终止节点、callin 镜像、
