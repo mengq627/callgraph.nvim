@@ -198,9 +198,19 @@ nvim --headless -u NONE -l tests/integration_lsp.lua   # clangd ≥ 20：纯 LSP
 nvim --headless -u NONE -l tests/cscope.lua            # cscope provider：输出解析 / 索引发现 / 可用性探测
 nvim --headless -u NONE -l tests/integration_complex.lua # test_complex.c：菱形 / 循环 / fan-out / 深链
 nvim --headless -u NONE -l tests/e2e_callout.lua         # 端到端：打开文件、定位光标、执行 :Callout（CI）
-nvim -u NONE -l tests/e2e_callout.lua                    # 同上，但带真实窗口——可观看运行过程
-nvim -u NONE -l tests/e2e_demo.lua                       # 电影式演示：打开窗口，分步走 打开→光标→:Callout→
-                                                         # 移动→callin→展开，逐步观看
+
+### 交互式 E2E（观看运行）
+
+在真实 nvim 窗口中运行用例，逐步执行每个动作并带屏幕提示与停留，便于
+逐条判断效果：
+
+```bash
+nvim -u NONE --cmd "set rtp+=<仓库>" tests/test_complex.c \
+  -c "lua dofile('<仓库>/tests/e2e_cases.lua').run('callout')"
+```
+
+用例定义在 `tests/e2e_cases.lua`（一组 `{ msg, fn, wait_ms, check }` 步骤）；
+可继续添加用例看护其他功能。headless（CI）会同步跑同一批用例并断言每步。
 ```
 
 `tests/smoke.lua` 覆盖：树形展开（同一符号按路径各出现一次）、循环终止节点、callin 镜像、
