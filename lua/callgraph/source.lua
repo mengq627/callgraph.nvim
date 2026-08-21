@@ -15,6 +15,7 @@ local lsp_mod = require('callgraph.lsp')
 local M = {}
 
 local avail = {} -- source name -> boolean
+local fetch_cache = {} -- symbol_id..'\0'..direction -> calls (session-level)
 
 local providers = {
   lsp = require('callgraph.source.lsp'),
@@ -62,19 +63,38 @@ function M.make_fetch(encoding, client, opts)
     if p.make_fetch then fetchers[#fetchers + 1] = p.make_fetch(encoding, client, opts) end
   end
   return function(node, direction)
+    -- Session-level cache: in tree mode the same symbol is reached through
+    -- several call paths, so without caching it would be re-queried once per
+    -- path — and again on every rebuild/expand. Key by symbol id + direction so
+    -- each symbol's callers/callees are fetched only once per session, for every
+    -- source (cscope, LSP, auto).
+    local key = (node.symbol_id or node.name or '?') .. '\0' .. direction
+    local cached = fetch_cache[key]
+    if cached ~= nil then
+      local d = util.Deferred.new()
+      d:resolve(cached)
+      return d
+    end
     local d = util.Deferred.new()
     util.async_start(function()
+      local result = {}
       for _, f in ipairs(fetchers) do
         local ok, calls = pcall(function() return util.await(f(node, direction)) end)
         if ok and calls and #calls > 0 then
-          d:resolve(calls)
-          return
+          result = calls
+          break
         end
       end
-      d:resolve({})
+      fetch_cache[key] = result
+      d:resolve(result)
     end)
     return d
   end
+end
+
+--- Clear the session-level query cache (e.g. after external index changes).
+function M.clear_cache()
+  fetch_cache = {}
 end
 
 --- Resolve the "current function" root. Currently delegates to the LSP adapter

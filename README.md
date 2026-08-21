@@ -52,6 +52,7 @@ Mouse: single click selects a box, **double-click** expands/collapses, scroll wh
 - **Auto-scroll**: moving the selection scrolls the canvas (horizontal/vertical) so the focused box stays visible.
 - **Multiple tabs**: several function+direction graphs can be open at once in one view, shown in the winbar.
 - **Multi-source**: call relationships can come from `lsp` / `cscope` / `ctags` / `auto` in the configured priority order; availability is probed once at startup and cached.
+- **Query caching**: each symbol's callers/callees are fetched only once per session — tree expansion reaches the same function along many paths, so the underlying query (cscope / LSP / auto) is never repeated for it, including across rebuilds and expands.
 - **Lazy.nvim friendly**: `documentSymbol` is cached in the background after `LspAttach`; opening a file costs zero.
 
 ## Data sources
