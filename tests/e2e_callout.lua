@@ -63,11 +63,15 @@ end
 
 check('callgraph window opened', graph_buf ~= nil)
 if graph_buf then
-  local text = table.concat(vim.api.nvim_buf_get_lines(graph_buf, 0, -1, false), '\n')
+  local lines = vim.api.nvim_buf_get_lines(graph_buf, 0, -1, false)
+  local text = table.concat(lines, '\n')
   check('graph shows main', text:find('main') ~= nil)
   check('graph shows alpha and beta', text:find('alpha') ~= nil and text:find('beta') ~= nil)
-  print('--- rendered call graph ---')
-  for _, l in ipairs(vim.api.nvim_buf_get_lines(graph_buf, 0, -1, false)) do print(l) end
+  -- The canvas is Unicode; on Windows the terminal stdout is often not UTF-8,
+  -- so save the snapshot to a file (open it with a UTF-8 editor / nvim).
+  local snap = vim.fn.stdpath('cache') .. '/callgraph_e2e_render.txt'
+  vim.fn.writefile(lines, snap)
+  print('render snapshot saved to ' .. snap)
 end
 
 -- Give the user a moment to see the window when running with a real UI
