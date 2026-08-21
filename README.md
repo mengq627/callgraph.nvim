@@ -202,6 +202,8 @@ nvim --headless -u NONE -l tests/cscope.lua            # cscope provider: output
 nvim --headless -u NONE -l tests/integration_complex.lua # test_complex.c: diamond / cycles / fan-out / deep chain
 nvim --headless -u NONE -l tests/e2e_callout.lua         # end-to-end: open file, place cursor, run :Callout (CI)
 nvim -u NONE -l tests/e2e_callout.lua                    # same, but with a real window — watch it run
+nvim -u NONE -l tests/e2e_demo.lua                       # movie-style demo: opens a window and walks through
+                                                         # open->cursor->:Callout->move->callin->expand in steps
 ```
 
 `tests/smoke.lua` covers: tree expansion (a symbol appears once per call path), cycle terminals, callin mirror,

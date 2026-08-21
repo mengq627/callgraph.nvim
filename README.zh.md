@@ -199,6 +199,8 @@ nvim --headless -u NONE -l tests/cscope.lua            # cscope provider：输�
 nvim --headless -u NONE -l tests/integration_complex.lua # test_complex.c：菱形 / 循环 / fan-out / 深链
 nvim --headless -u NONE -l tests/e2e_callout.lua         # 端到端：打开文件、定位光标、执行 :Callout（CI）
 nvim -u NONE -l tests/e2e_callout.lua                    # 同上，但带真实窗口——可观看运行过程
+nvim -u NONE -l tests/e2e_demo.lua                       # 电影式演示：打开窗口，分步走 打开→光标→:Callout→
+                                                         # 移动→callin→展开，逐步观看
 ```
 
 `tests/smoke.lua` 覆盖：树形展开（同一符号按路径各出现一次）、循环终止节点、callin 镜像、
