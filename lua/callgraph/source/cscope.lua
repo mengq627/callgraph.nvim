@@ -21,6 +21,11 @@ local M = {}
 -- most once per session, regardless of how many call paths reach it.
 local query_cache = {}
 
+-- Definition cache: funcname -> { uri, line } or false (not found).
+-- Populated lazily on jump (cscope -1), not during graph building, so the
+-- graph appears immediately without waiting for definition lookups.
+local def_cache = {}
+
 --- Walk up from `dir` looking for `cscope.out`; returns the db path or nil.
 function M.find_db(dir)
   dir = dir or vim.fn.getcwd()
@@ -39,24 +44,29 @@ function M.available(opts)
   return M.find_db() ~= nil
 end
 
---- Parse cscope -L output into call records.
---- Each line: `<file> <symbol> <line> <call text>`; with `-P <dir>` the file
---- is absolute. line is 1-based.
-function M.parse_output(stdout)
+--- Each line: `<file> <symbol> <line> <call text>`; line is 1-based.
+--- `db_dir` is the directory containing cscope.out — relative file names in
+--- the output are resolved against it so uris are absolute and jumpable.
+function M.parse_output(stdout, db_dir)
   local calls = {}
   for line in (stdout or ''):gmatch('[^\r\n]+') do
     local file, sym, ln = line:match('^(%S+)%s+(%S+)%s+(%d+)')
     if file and sym and ln then
       local line_no = tonumber(ln)
+      -- Resolve relative paths against the cscope.out directory.
+      if db_dir and not file:match('^/') then
+        file = db_dir .. '/' .. file
+      end
+      local uri = vim.uri_from_fname(file)
       calls[#calls + 1] = {
         item = {
           name = sym,
           kind = 12, -- function
-          uri = vim.uri_from_fname(file),
+          uri = uri,
           range = { start = { line = line_no - 1, character = 0 }, ['end'] = { line = line_no - 1, character = 0 } },
           selectionRange = { start = { line = line_no - 1, character = 0 }, ['end'] = { line = line_no - 1, character = #sym } },
         },
-        call_site = { uri = vim.uri_from_fname(file), line = line_no - 1 },
+        call_site = { uri = uri, line = line_no - 1 },
       }
     end
   end
@@ -113,9 +123,58 @@ function M.query(funcname, direction, opts)
   return d
 end
 
+--- Look up a function's definition location via `cscope -1`.
+--- Returns a Deferred resolving to { uri, line } (0-based line) or nil.
+--- Cached by funcname so each function is queried at most once per session.
+--- This is called lazily on jump, not during graph building, so the graph
+--- appears immediately — definition lookup only happens when the user
+--- actually presses Enter on a cscope node.
+function M.find_definition(funcname)
+  local d = util.Deferred.new()
+  if not funcname then d:resolve(nil); return d end
+  if def_cache[funcname] ~= nil then
+    d:resolve(def_cache[funcname] or nil)
+    return d
+  end
+  local db = M.find_db()
+  if not db then
+    def_cache[funcname] = false
+    d:resolve(nil)
+    return d
+  end
+  local db_dir = vim.fn.fnamemodify(db, ':h')
+  local cmd = { 'cscope', '-dL', '-1', funcname, '-f', db, '-P', db_dir }
+  vim.system(cmd, { text = true }, function(proc)
+    vim.schedule(function()
+      if proc.code ~= 0 or not proc.stdout then
+        def_cache[funcname] = false
+        d:resolve(nil)
+        return
+      end
+      local first = proc.stdout:match('^[^\r\n]+')
+      if first then
+        local file, _, ln = first:match('^(%S+)%s+(%S+)%s+(%d+)')
+        if file and ln then
+          if not file:match('^/') then
+            file = db_dir .. '/' .. file
+          end
+          local result = { uri = vim.uri_from_fname(file), line = tonumber(ln) - 1 }
+          def_cache[funcname] = result
+          d:resolve(result)
+          return
+        end
+      end
+      def_cache[funcname] = false
+      d:resolve(nil)
+    end)
+  end)
+  return d
+end
+
 --- Clear the module-level query cache (e.g. after external index changes).
 function M.clear_cache()
   query_cache = {}
+  def_cache = {}
 end
 
 --- Fetch function for graph building: node, direction -> Deferred(calls).
