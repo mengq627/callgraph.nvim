@@ -185,12 +185,12 @@ local CASES = {
     { msg = '[resize] 右侧视图 :Callout（fixed_width=20）', fn = function()
         start_case({ show_call_site = false, window = { position = 'right', fixed_width = 20 } })
         vim.api.nvim_win_set_cursor(0, { 99, 6 }); vim.cmd('Callout') end, wait = 2000 },
-    { msg = '[resize] 按 > 放大窗口（预期变宽）', fn = function() view.resize_window_size(1) end, wait = 1500,
+    { msg = '[resize] 按 < 放大窗口（预期变宽）', fn = function() view.resize_window_size(1) end, wait = 1500,
       check = function()
         local w = graph_win()
         return w ~= nil and vim.api.nvim_win_get_width(w) > 20
       end },
-    { msg = '[resize] 按 < 缩小窗口（预期回到 20）', fn = function() view.resize_window_size(-1) end, wait = 1500,
+    { msg = '[resize] 按 > 缩小窗口（预期回到 20）', fn = function() view.resize_window_size(-1) end, wait = 1500,
       check = function()
         local w = graph_win()
         return w ~= nil and vim.api.nvim_win_get_width(w) == 20

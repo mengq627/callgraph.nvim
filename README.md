@@ -37,7 +37,7 @@ a language-agnostic, cross-file source — plus optional `cscope` / heuristic so
 | `r` | refresh |
 | `i` / `o` | toggle callin / callout in place |
 | `+` / `=` / `-` | depth +1 / -1 |
-| `>` / `<` | grow / shrink the view window (width for `right`, height for `bottom`) |
+| `<` / `>` | grow / shrink the view window (width for `right`, height for `bottom`) |
 | `?` | keymap help |
 
 Mouse: single click selects a box, **double-click** expands/collapses, scroll wheel scrolls the canvas.
@@ -51,7 +51,7 @@ Mouse: single click selects a box, **double-click** expands/collapses, scroll wh
 - **Call-site labels**: each box shows the call site `file:line` (`show_call_site` can be turned off).
 - **Long-name truncation**: over-wide function names are truncated to `…`; hovering shows the full path in the message area.
 - **Auto-scroll**: moving the selection scrolls the canvas (horizontal/vertical) so the focused box stays visible.
-- **Dynamic window size**: `>` / `<` grow/shrink the view window (width for `right`, height for `bottom`); the size is kept for later renders and re-opens.
+- **Dynamic window size**: `<` / `>` grow/shrink the view window (width for `right`, height for `bottom`); the size is kept for later renders and re-opens.
 - **Multiple tabs**: several function+direction graphs can be open at once in one view, shown in the winbar.
 - **Multi-source**: call relationships can come from `lsp` / `cscope` / `ctags` / `auto` in the configured priority order; availability is probed once at startup and cached.
 - **Query caching**: each symbol's callers/callees are fetched only once per session — tree expansion reaches the same function along many paths, so the underlying query (cscope / LSP / auto) is never repeated for it, including across rebuilds and expands.
@@ -143,7 +143,7 @@ require('callgraph').setup({
     to_callin = 'i', to_callout = 'o',
     depth_up = '+', depth_up_alt = '=', -- `=` equals `+` (no shift needed)
     depth_down = '-',
-    win_grow = '>', win_shrink = '<', -- grow / shrink the view window
+    win_grow = '<', win_shrink = '>', -- '<' grow / '>' shrink the view window
     jump_to_def = '<CR>', jump_to_def_alt = 'd',
     tab_next = '<Tab>', tab_prev = '<S-Tab>',
     help = '?',
