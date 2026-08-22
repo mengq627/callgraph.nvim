@@ -11,6 +11,16 @@ local util = require('callgraph.util')
 
 local M = {}
 
+-- Module-level query cache: funcname\0direction -> { done, calls } or
+-- { done = false, deferred = d } when a query is in flight.
+-- This is needed because source.lua's session cache keys on symbol_id
+-- (uri + name + selectionRange line/char), and cscope puts the *call-site*
+-- line into selectionRange — so the same function called from different
+-- lines gets different symbol_ids and source.lua's cache never hits.
+-- Keying by funcname+direction here ensures each function is queried at
+-- most once per session, regardless of how many call paths reach it.
+local query_cache = {}
+
 --- Walk up from `dir` looking for `cscope.out`; returns the db path or nil.
 function M.find_db(dir)
   dir = dir or vim.fn.getcwd()
@@ -55,10 +65,28 @@ end
 
 --- Run one cscope query. Returns Deferred resolving to parsed calls.
 --- direction: 'callout' -> -2 (callees), 'callin' -> -3 (callers).
+--- Results are cached by funcname+direction at module level so the same
+--- function is never queried twice per session.
 function M.query(funcname, direction, opts)
+  local key = (funcname or '?') .. '\0' .. (direction or '?')
+
+  -- Cache hit (done): return a fresh Deferred resolved immediately.
+  local cached = query_cache[key]
+  if cached then
+    if cached.done then
+      local d = util.Deferred.new()
+      d:resolve(cached.calls)
+      return d
+    end
+    -- Pending: share the same Deferred so all waiters get one query's result.
+    return cached.deferred
+  end
+
   local d = util.Deferred.new()
+  query_cache[key] = { done = false, deferred = d }
   local db = M.find_db()
   if not db or not funcname then
+    query_cache[key] = { done = true, calls = {} }
     d:resolve({})
     return d
   end
@@ -73,13 +101,21 @@ function M.query(funcname, direction, opts)
     -- main loop so the await/notify path is safe.
     vim.schedule(function()
       if proc.code ~= 0 then
+        query_cache[key] = { done = true, calls = {} }
         d:resolve({})
         return
       end
-      d:resolve(M.parse_output(proc.stdout))
+      local calls = M.parse_output(proc.stdout, db_dir)
+      query_cache[key] = { done = true, calls = calls }
+      d:resolve(calls)
     end)
   end)
   return d
+end
+
+--- Clear the module-level query cache (e.g. after external index changes).
+function M.clear_cache()
+  query_cache = {}
 end
 
 --- Fetch function for graph building: node, direction -> Deferred(calls).
