@@ -269,7 +269,7 @@ function M.focus_selected()
     vim.api.nvim_win_call(state.win, function()
       vim.cmd('normal! zz')
     end)
-    -- Keep the focused box fully visible with a small margin, scrolling as
+    -- Keep the focused function name visible with a small margin, scrolling as
     -- little as possible (a full centering scrolls too far and makes the
     -- cursor's on-screen position jump backwards). `vim.wo.scroll` does NOT
     -- control horizontal scroll; the window's left edge is winsaveview().leftcol
@@ -286,15 +286,29 @@ function M.focus_selected()
       local cur_left = view.leftcol or 0
       local target = cur_left
       local margin = 2
-      -- Box left edge = text start - 1 (the box border), box right edge =
-      -- text start + box width - 2 (also the border). Scroll just enough to
-      -- keep the whole box + margin visible.
-      local box_left = char_idx - 1 - margin
-      local box_right = char_idx + bw - 2 + margin
-      if box_left < cur_left then
-        target = math.max(0, box_left)
-      elseif box_right > cur_left + winw - 1 then
-        target = math.max(0, box_right - winw + 1)
+      -- Keep the focused box fully visible when it fits. A box wider than the
+      -- window cannot fully fit, so favor the function name (cursor) over
+      -- aligning the box's right edge — the old edge-alignment pushed the
+      -- cursor out of the window's left side for wide boxes, making the
+      -- selection invisible.
+      local box_left = char_idx - 1 -- box left border column
+      local box_right = char_idx + box.width - 2 -- box right border column
+      if box.width <= winw - 2 * margin then
+        local bl = box_left - margin
+        local br = box_right + margin
+        if bl < cur_left then
+          target = math.max(0, bl)
+        elseif br > cur_left + winw - 1 then
+          target = math.max(0, br - winw + 1)
+        end
+      else
+        local want_left = char_idx - margin
+        local want_right = char_idx + margin
+        if want_left < cur_left then
+          target = math.max(0, want_left)
+        elseif want_right > cur_left + winw - 1 then
+          target = math.max(0, want_right - winw + 1)
+        end
       end
       if target ~= cur_left then
         view.leftcol = target
