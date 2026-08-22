@@ -351,7 +351,20 @@ function M.move(dir)
   local d = dirs[dir]
   if not d then return end
   local dx, dy = d[1], d[2]
+  local is_vertical = dy ~= 0
+  -- A candidate "aligned" with the focus along the movement axis: for j/k the
+  -- same column (overlapping col range), for h/l the same row (overlapping row
+  -- range). Prefer aligned targets so vertical movement lands on a sibling
+  -- below (b -> c) instead of a child one column over but geometrically closer
+  -- (b -> f); fall back to the nearest neighbor when nothing is aligned.
+  local function aligned(b)
+    if is_vertical then
+      return b.col < focus.col + focus.width and focus.col < b.col + b.width
+    end
+    return b.row < focus.row + focus.height and focus.row < b.row + b.height
+  end
   local best, best_score
+  local best_al, best_al_score
   for id, b in pairs(tab.last_layout.boxes) do
     if id ~= tab.selected_id then
       local bc = b.col + b.width / 2
@@ -361,12 +374,17 @@ function M.move(dir)
       if in_half then
         local score
         if dx ~= 0 then score = math.abs(dc) + math.abs(dr) * 0.4 else score = math.abs(dr) + math.abs(dc) * 0.4 end
-        if not best_score or score < best_score then best, best_score = id, score end
+        if aligned(b) then
+          if not best_al_score or score < best_al_score then best_al, best_al_score = id, score end
+        elseif not best_score or score < best_score then
+          best, best_score = id, score
+        end
       end
     end
   end
-  if best then
-    tab.selected_id = best
+  local target = best_al or best
+  if target then
+    tab.selected_id = target
     M.render_view()
   end
 end

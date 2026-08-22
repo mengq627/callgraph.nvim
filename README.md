@@ -29,7 +29,7 @@ a language-agnostic, cross-file source — plus optional `cscope` / heuristic so
 
 | Key | Action |
 |---|---|
-| `h` `j` `k` `l` / arrows | move the selection (spatial nearest) |
+| `h` `j` `k` `l` / arrows | move the selection (aligned column/row first, spatial nearest otherwise) |
 | `<Space>` | expand / collapse the focused box |
 | `<Enter>` / `d` | jump to the function definition (view stays open) |
 | `<Tab>` `<S-Tab>` | cycle tabs |
