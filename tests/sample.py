@@ -44,3 +44,20 @@ def main():
     beta()
     chain1()
     recursive(2)
+
+
+class Greeter:
+    """Class-method calls: methods call each other and module functions."""
+
+    def greet(self):
+        return shared()
+
+    def greet_many(self, n):
+        return [self.greet() for _ in range(n)]
+
+    def run(self):
+        return self.greet_many(2)
+
+
+def build_greeter():
+    return Greeter()
