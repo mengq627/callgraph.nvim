@@ -140,8 +140,8 @@ require('callgraph').setup({
   },
   colors = {
     -- 画布颜色：'off'（默认终端色）| 'auto'（镜像代码区：函数名 <- @function、
-    -- 文件:行号 <- Comment、背景 <- Normal；连线白色、边框蓝紫）
-    -- | 'custom'（用下面的颜色）
+    -- 选中函数名与内联符号 <- @keyword、文件:行号 <- Comment、背景 <- Normal；
+    -- 连线白色、边框蓝紫）| 'custom'（用下面的颜色）
     mode = 'auto',
     func = '#98c379',    -- 函数名（custom）
     location = '#5c6370', -- 文件:行号（custom）
@@ -177,8 +177,7 @@ require('callgraph').setup({
 | ![off](assets/off_colors.png) | ![auto](assets/auto_colors.png) |
 
 - **off**：纯终端色——边框、文本、连线都用默认调色板。
-- **auto**：镜像代码区——函数名跟随 `@function`、文件:行号跟随 `Comment`、
-  内联符号（⟳ / ❯）跟随 `@keyword`、背景跟随 `Normal`、边框蓝紫、连线白。
+- **auto**：镜像代码区——函数名跟随 `@function`、**选中**函数名与内联符号（⟳ / ❯）跟随 `@keyword`、文件:行号跟随 `Comment`、背景跟随 `Normal`、边框蓝紫、连线白。
 - **custom**：使用上面 `colors.*` 的显式颜色。
 
 ## 架构

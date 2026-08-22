@@ -65,9 +65,9 @@ M.defaults = {
   },
   -- Canvas colors. `mode`:
   --   off     : default terminal colors (current behavior)
-  --   auto    : mirror the code area — function name <- @function, file:line
-  --             <- Comment, background <- Normal; edges white, borders bluish
-  --             purple.
+  --   auto    : mirror the code area — function name <- @function, selected
+  --             name + inline markers <- @keyword, file:line <- Comment,
+  --             background <- Normal; edges white, borders bluish purple.
   --   custom  : use the explicit colors below.
   colors = {
     mode = 'auto',
@@ -152,13 +152,14 @@ function M.resolve_colors()
   end
   local normal = vim.api.nvim_get_hl(0, { name = 'Normal' })
   local fn = fg('@function') or fg('Function') or '#ffffff'
+  local kw = fg('@keyword') or fg('Keyword') or '#e5c07b' -- markers & selected name follow keywords
   return {
     func = fn,
-    focus = fn,
+    focus = kw, -- selected function name follows the keyword color (same as the ⟳ marker)
     location = fg('Comment') or '#888888',
     border = '#9d7cd8', -- bluish purple
     edge = '#ffffff',
-    symbol = fg('@keyword') or fg('Keyword') or '#e5c07b', -- markers follow keywords
+    symbol = kw,
     bg = normal.bg,
   }
 end

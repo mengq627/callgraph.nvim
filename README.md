@@ -144,9 +144,9 @@ require('callgraph').setup({
   },
   colors = {
     -- Canvas colors: 'off' (default terminal colors) | 'auto' (mirror the code
-    -- area: function name <- @function, file:line <- Comment, background <-
-    -- Normal; edges white, borders bluish purple) | 'custom' (use the colors
-    -- below).
+    -- area: function name <- @function, selected name + inline markers <-
+    -- @keyword, file:line <- Comment, background <- Normal; edges white,
+    -- borders bluish purple) | 'custom' (use the colors below).
     mode = 'auto',
     func = '#98c379',    -- function / symbol name (custom)
     location = '#5c6370', -- file:line label (custom)
@@ -182,7 +182,7 @@ require('callgraph').setup({
 | ![off](assets/off_colors.png) | ![auto](assets/auto_colors.png) |
 
 - **off**: plain terminal colors — borders, text and connection lines all use the default palette.
-- **auto**: mirrors the code area — function name follows `@function`, `file:line` follows `Comment`, inline markers (⟳ / ❯) follow `@keyword`, background follows `Normal`, borders are bluish purple, edges white.
+- **auto**: mirrors the code area — function name follows `@function`, the **selected** function name and inline markers (⟳ / ❯) follow `@keyword`, `file:line` follows `Comment`, background follows `Normal`, borders are bluish purple, edges white.
 - **custom**: use the `colors.*` values above.
 
 ## Architecture
