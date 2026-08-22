@@ -36,7 +36,7 @@
 | `q` `<Esc>` | 关闭当前 tab（最后一个 tab 关闭时关闭视图） |
 | `r` | 刷新 |
 | `i` / `o` | 原地切换 callin / callout |
-| `+` / `-` | 全局深度 +1 / -1 |
+| `+` / `=` / `-` | 全局深度 +1 / -1 |
 | `?` | 按键速查 |
 
 鼠标：单击选中框，**双击**展开/折叠，滚轮滚动画布。
@@ -136,7 +136,8 @@ require('callgraph').setup({
     close = 'q', close_alt = '<Esc>',
     refresh = 'r',
     to_callin = 'i', to_callout = 'o',
-    depth_up = '+', depth_down = '-',
+    depth_up = '+', depth_up_alt = '=', -- `=` 与 `+` 等价（免 Shift）
+    depth_down = '-',
     jump_to_def = '<CR>', jump_to_def_alt = 'd',
     tab_next = '<Tab>', tab_prev = '<S-Tab>',
     help = '?',

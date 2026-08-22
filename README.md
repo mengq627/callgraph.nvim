@@ -36,7 +36,7 @@ a language-agnostic, cross-file source — plus optional `cscope` / heuristic so
 | `q` `<Esc>` | close the current tab (closes the view when the last tab closes) |
 | `r` | refresh |
 | `i` / `o` | toggle callin / callout in place |
-| `+` / `-` | depth +1 / -1 |
+| `+` / `=` / `-` | depth +1 / -1 |
 | `?` | keymap help |
 
 Mouse: single click selects a box, **double-click** expands/collapses, scroll wheel scrolls the canvas.
@@ -139,7 +139,8 @@ require('callgraph').setup({
     close = 'q', close_alt = '<Esc>',
     refresh = 'r',
     to_callin = 'i', to_callout = 'o',
-    depth_up = '+', depth_down = '-',
+    depth_up = '+', depth_up_alt = '=', -- `=` equals `+` (no shift needed)
+    depth_down = '-',
     jump_to_def = '<CR>', jump_to_def_alt = 'd',
     tab_next = '<Tab>', tab_prev = '<S-Tab>',
     help = '?',

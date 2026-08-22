@@ -503,7 +503,7 @@ function M.show_help()
     '  q / Esc             close tab',
     '  r                   refresh',
     '  i / o               callin / callout',
-    '  + / -               depth +1 / -1',
+    '  + / = -            depth +1 / -1',
     '  click / dbl-click   select / expand (mouse)',
     '  Tab / Shift-Tab     switch tab',
   }, '\n'), vim.log.levels.INFO, { title = 'Callgraph' })
@@ -537,6 +537,7 @@ function M.setup_keymaps()
   set(km.to_callin, function() M.set_direction('callin') end)
   set(km.to_callout, function() M.set_direction('callout') end)
   set(km.depth_up, function() M.change_depth(1) end)
+  set(km.depth_up_alt, function() M.change_depth(1) end)
   set(km.depth_down, function() M.change_depth(-1) end)
   set(km.jump_to_def, function() M.jump_to_def() end)
   set(km.jump_to_def_alt, function() M.jump_to_def() end)
