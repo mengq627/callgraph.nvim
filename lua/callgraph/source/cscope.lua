@@ -123,23 +123,23 @@ function M.query(funcname, direction, opts)
   return d
 end
 
---- Look up a function's definition location via `cscope -1`.
---- Returns a Deferred resolving to { uri, line } (0-based line) or nil.
---- Cached by funcname so each function is queried at most once per session.
---- This is called lazily on jump, not during graph building, so the graph
---- appears immediately — definition lookup only happens when the user
---- actually presses Enter on a cscope node.
-function M.find_definition(funcname)
+--- Look up a function's definition locations via `cscope -1`.
+--- Returns a Deferred resolving to a list of `{ uri, line }` (0-based line),
+--- deduped by uri:line, keeping ALL definitions (conditionally-compiled /
+--- overloaded names appear more than once). Cached by funcname so each
+--- function is queried at most once per session. Called lazily on jump /
+--- expand — the graph builds without definition lookups.
+function M.find_definitions(funcname)
   local d = util.Deferred.new()
-  if not funcname then d:resolve(nil); return d end
+  if not funcname then d:resolve({}); return d end
   if def_cache[funcname] ~= nil then
-    d:resolve(def_cache[funcname] or nil)
+    d:resolve(def_cache[funcname] or {})
     return d
   end
   local db = M.find_db()
   if not db then
     def_cache[funcname] = false
-    d:resolve(nil)
+    d:resolve({})
     return d
   end
   local db_dir = vim.fn.fnamemodify(db, ':h')
@@ -148,25 +148,35 @@ function M.find_definition(funcname)
     vim.schedule(function()
       if proc.code ~= 0 or not proc.stdout then
         def_cache[funcname] = false
-        d:resolve(nil)
+        d:resolve({})
         return
       end
-      local first = proc.stdout:match('^[^\r\n]+')
-      if first then
-        local file, _, ln = first:match('^(%S+)%s+(%S+)%s+(%d+)')
+      local defs, seen = {}, {}
+      for line in (proc.stdout):gmatch('[^\r\n]+') do
+        local file, _, ln = line:match('^(%S+)%s+(%S+)%s+(%d+)')
         if file and ln then
-          if not file:match('^/') then
-            file = db_dir .. '/' .. file
+          if not file:match('^/') then file = db_dir .. '/' .. file end
+          local def = { uri = vim.uri_from_fname(file), line = tonumber(ln) - 1 }
+          local key = def.uri .. ':' .. def.line
+          if not seen[key] then
+            seen[key] = true
+            defs[#defs + 1] = def
           end
-          local result = { uri = vim.uri_from_fname(file), line = tonumber(ln) - 1 }
-          def_cache[funcname] = result
-          d:resolve(result)
-          return
         end
       end
-      def_cache[funcname] = false
-      d:resolve(nil)
+      def_cache[funcname] = defs
+      d:resolve(defs)
     end)
+  end)
+  return d
+end
+
+--- First definition location for `funcname` (or nil) — keeps the old jump
+--- behavior for callers that only need one.
+function M.find_definition(funcname)
+  local d = util.Deferred.new()
+  M.find_definitions(funcname):next(function(defs)
+    d:resolve(defs and defs[1] or nil)
   end)
   return d
 end

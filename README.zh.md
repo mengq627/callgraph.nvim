@@ -55,6 +55,7 @@
 - **多标签页**：一个视图内可同时打开多个「函数 + 方向」的图，winbar 显示标签，`<Tab>` 切换。
 - **多来源**：调用关系可来自 `lsp` / `cscope` / `ctags` / `auto` 多种方式，按 `sources` 配置的优先级取第一个有结果者；启动时后台探测各来源是否可用（如 cscope 二进制/索引不存在则自动跳过），结果缓存避免每次查询重新探测。
 - **查询缓存**：每个符号的调用关系每次会话只查询一次——树形展开会沿多条路径重复到达同一函数，但底层查询（cscope / LSP / auto）不会为它重复执行，跨 rebuild / 展开也复用。
+- **多处定义（cscope）**：函数名在 cscope 里有多个定义时（如条件编译），展开或跳转会弹出定义选择窗口；选中的定义决定展开——子调用只保留该定义所在文件的调用点。选择按节点在会话内记住。
 - **Lazy.nvim 友好**：`documentSymbol` 在 `LspAttach` 后后台异步缓存，打开文件零阻塞。
 
 ## 数据来源
@@ -62,7 +63,7 @@
 `config.sources` 按优先级列出可用来源（`sources = { 'lsp', 'auto' }`）：
 
 - **`lsp`（默认首选）**：LSP Call Hierarchy——语言无关、跨文件。`incomingCalls`（callin）clangd ≥ LLVM 12；`outgoingCalls`（callout）需要 clangd **≥ LLVM 20**（2024-12 才落地）。
-- **`cscope`**：cscope 数据库查询（需要 `cscope` 二进制 + `cscope.out`，适合 C/C++）。
+- **`cscope`**：cscope 数据库查询（需要 `cscope` 二进制 + `cscope.out`，适合 C/C++）。同名多处定义时，展开/跳转会弹出定义选择（见[特性](#特性)）。
 - **`ctags`**：ctags（预留，尚未实现）。
 - **`auto`（兜底）**：启发式单文件——callout 扫描函数体里的调用点逐个 `prepareCallHierarchy` 解析，解析不到时**按函数名在当前文件 documentSymbol 里匹配**（能处理先调用后声明的源码）；callin 用 `references` + documentSymbol 定位调用者。**只能单文件内兜底**，跨文件调用解析不了。
 

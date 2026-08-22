@@ -55,6 +55,7 @@ Mouse: single click selects a box, **double-click** expands/collapses, scroll wh
 - **Multiple tabs**: several function+direction graphs can be open at once in one view, shown in the winbar.
 - **Multi-source**: call relationships can come from `lsp` / `cscope` / `ctags` / `auto` in the configured priority order; availability is probed once at startup and cached.
 - **Query caching**: each symbol's callers/callees are fetched only once per session — tree expansion reaches the same function along many paths, so the underlying query (cscope / LSP / auto) is never repeated for it, including across rebuilds and expands.
+- **Multiple definitions (cscope)**: when a function name has several cscope definitions (e.g. conditionally compiled), expanding or jumping to it opens a definition picker; the chosen definition's implementation is used — the expansion keeps only call sites in that definition's file. The choice is remembered per node for the session.
 - **Lazy.nvim friendly**: `documentSymbol` is cached in the background after `LspAttach`; opening a file costs zero.
 
 ## Data sources
@@ -62,7 +63,7 @@ Mouse: single click selects a box, **double-click** expands/collapses, scroll wh
 `config.sources` lists the sources in priority order (`sources = { 'lsp', 'auto' }`). The plugin probes which are actually available on this machine (executable + index present) and caches the result:
 
 - **`lsp`** (default first): LSP Call Hierarchy — language-agnostic, cross-file. `incomingCalls` (callin) needs clangd ≥ LLVM 12; `outgoingCalls` (callout) needs clangd **≥ LLVM 20** (landed 2024-12).
-- **`cscope`**: cscope database queries (needs `cscope` + `cscope.out`; good for C/C++).
+- **`cscope`**: cscope database queries (needs `cscope` + `cscope.out`; good for C/C++). A name resolving to several definitions pops a picker on expand / jump (see [Features](#features)).
 - **`ctags`**: ctags (reserved; not implemented yet).
 - **`auto`** (fallback): heuristic single-file — callout scans the function body and resolves each call token via `prepareCallHierarchy`, falling back to **name matching against the file's documentSymbol** (handles call-before-declaration source); callin uses `references` + documentSymbol. **Single-file only** — cross-file calls cannot be resolved.
 

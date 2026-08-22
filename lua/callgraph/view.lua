@@ -7,6 +7,7 @@ local config = require('callgraph.config')
 local debug = require('callgraph.debug')
 local graph_mod = require('callgraph.graph')
 local layout_mod = require('callgraph.layout')
+local picker = require('callgraph.picker')
 local render_mod = require('callgraph.render')
 local lsp_mod = require('callgraph.lsp')
 local source_mod = require('callgraph.source')
@@ -389,13 +390,86 @@ function M.move(dir)
   end
 end
 
+-- Forward declarations: the helpers are defined after toggle_expand but
+-- referenced inside it.
+local is_cscope_node, filtered_fetch, expand_normal, expand_with_def
+
 function M.toggle_expand()
   local tab = active_tab()
   if not tab or not tab.graph then return end
   local node = tab.graph.nodes[tab.selected_id]
   if not node then return end
   local fetch = source_mod.make_fetch(state.encoding, state.client, config.get())
+  if is_cscope_node(node) then
+    local cscope = source_mod.provider('cscope')
+    cscope.find_definitions(node.name):next(function(defs)
+      if defs and #defs > 1 then
+        -- Several definitions: the user must pick one before we can expand
+        -- against the right implementation. Remember the choice on the node.
+        if node.chosen_def then
+          expand_with_def(tab, node, fetch, node.chosen_def)
+        else
+          picker.pick(defs, function(def)
+            if def then
+              node.chosen_def = def
+              expand_with_def(tab, node, fetch, def)
+            end
+          end)
+        end
+      else
+        expand_normal(tab, node, fetch)
+      end
+    end)
+  else
+    expand_normal(tab, node, fetch)
+  end
+end
+
+-- cscope nodes carry the call-site location in uri/range (cscope -L output is
+-- call sites, not definitions). Detect them by uri/line matching the call_site.
+local function is_cscope_node(node)
+  local cscope = source_mod.provider('cscope')
+  return cscope ~= nil
+    and node.call_site ~= nil
+    and node.uri == node.call_site.uri
+    and node.range ~= nil
+    and node.range.start ~= nil
+    and node.range.start.line == node.call_site.line
+end
+
+-- Wrap a fetch so results are restricted to calls in `def`'s file — the chosen
+-- definition's implementation.
+local function filtered_fetch(fetch, def)
+  return function(node, direction)
+    local d = fetch(node, direction)
+    local out = util.Deferred.new()
+    d:next(function(calls)
+      local kept = {}
+      for _, c in ipairs(calls) do
+        if c.call_site and c.call_site.uri == def.uri then
+          kept[#kept + 1] = c
+        end
+      end
+      out:resolve(kept)
+    end, function(err)
+      out:reject(err)
+    end)
+    return out
+  end
+end
+
+local function expand_normal(tab, node, fetch)
   local d = graph_mod.expand(tab.graph, node, fetch)
+  d:next(function(g)
+    tab.graph = g
+    M.render_view()
+  end, function(err)
+    vim.notify('Callgraph: expand failed: ' .. tostring(err), vim.log.levels.ERROR)
+  end)
+end
+
+local function expand_with_def(tab, node, fetch, def)
+  local d = graph_mod.rebuild(tab.graph, node, filtered_fetch(fetch, def))
   d:next(function(g)
     tab.graph = g
     M.render_view()
@@ -486,22 +560,31 @@ function M.jump_to_def()
     vim.api.nvim_set_current_win(orig)
   end
   -- cscope nodes carry the *call-site* location in uri/range (cscope -L output
-  -- is call sites, not definitions). Detect this: when the node's uri/line
-  -- matches its call_site, the uri/range point at the caller, not the def — so
-  -- lazily look up the real definition via `cscope -1` and jump there.
-  local cscope = source_mod.provider('cscope')
-  local is_cscope_node = cscope
-    and node.call_site
-    and node.uri == node.call_site.uri
-    and node.range
-    and node.range.start
-    and node.range.start.line == node.call_site.line
-  if is_cscope_node then
-    cscope.find_definition(node.name):next(function(def)
-      if def then
-        lsp_mod.jump_to_location(def.uri,
-          { start = { line = def.line, character = 0 }, ['end'] = { line = def.line, character = 0 } },
-          state.encoding)
+  -- is call sites, not definitions). Jump to the real definition via `cscope -1`
+  -- — preferring the definition the user already chose when expanding; with
+  -- several definitions, ask which one to jump to.
+  if is_cscope_node(node) then
+    local cscope = source_mod.provider('cscope')
+    local function jump_to_def(def)
+      lsp_mod.jump_to_location(def.uri,
+        { start = { line = def.line, character = 0 }, ['end'] = { line = def.line, character = 0 } },
+        state.encoding)
+    end
+    if node.chosen_def then
+      jump_to_def(node.chosen_def)
+      return
+    end
+    cscope.find_definitions(node.name):next(function(defs)
+      if defs and #defs > 1 then
+        picker.pick(defs, function(def)
+          if def then
+            node.chosen_def = def
+            jump_to_def(def)
+          end
+        end)
+      elseif defs and #defs == 1 then
+        node.chosen_def = defs[1]
+        jump_to_def(defs[1])
       elseif node.range then
         -- Fallback: jump to the call site if definition lookup fails.
         lsp_mod.jump_to_location(node.uri, node.range, state.encoding)

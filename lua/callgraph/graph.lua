@@ -66,6 +66,12 @@ local function new_node(graph, item, depth, parent_id)
     is_cycle = false,
     cycle_of = nil,
     visible = depth <= graph.max_depth,
+    -- Multiple-definition state (cscope): when a name resolves to more than
+    -- one definition the user picks one; chosen_def drives expand filtering
+    -- (call sites restricted to that definition's file) and jump-to-def.
+    def_pending = false,      -- name has several cscope definitions, not chosen yet
+    def_candidates = nil,     -- list of { uri, line } while def_pending
+    chosen_def = nil,         -- the user-selected { uri, line }
   }
   graph.next_order = graph.next_order + 1
   return n
@@ -89,6 +95,46 @@ local function is_ancestor(graph, node, symbol_id)
     guard = guard + 1
   end
   return false
+end
+
+--- Create `node`'s children from fetched `calls` (shared by build_sync,
+--- expand_sync and rebuild_node). Handles cycle back-edges; returns the newly
+--- created ordinary children so callers can queue / hide them.
+local function add_children(graph, node, calls)
+  local new_nodes = {}
+  local seen = {}
+  for _, c in ipairs(calls) do
+    local sym_id = M.node_id(c.item)
+    if not seen[sym_id] then
+      seen[sym_id] = true
+      node.has_children = true
+      if is_ancestor(graph, node, sym_id) then
+        -- Back-edge: close the cycle as a terminal leaf under `node`.
+        local cyc_key = node.id .. '\0#cycle\0' .. sym_id
+        if not graph.nodes[cyc_key] then
+          local cyc = new_node(graph, c.item, node.depth + 1, node.id)
+          cyc.id = cyc_key
+          cyc.is_cycle = true
+          cyc.cycle_of = node.id
+          cyc.children_fetched = true
+          cyc.has_children = false
+          graph.nodes[cyc_key] = cyc
+          add_edge(graph, node, cyc, c.call_site)
+        end
+      else
+        -- Tree mode: no dedup — each call path gets its own node.
+        local cid = node.id .. '\0' .. sym_id
+        if not graph.nodes[cid] then
+          local n = new_node(graph, c.item, node.depth + 1, node.id)
+          n.id = cid
+          graph.nodes[cid] = n
+          add_edge(graph, node, n, c.call_site)
+          new_nodes[#new_nodes + 1] = n
+        end
+      end
+    end
+  end
+  return new_nodes
 end
 
 local function recompute_max_visible(graph)
@@ -139,37 +185,9 @@ function M.build_sync(root, direction, opts, fetch)
     if not node.is_cycle and node.depth <= max_depth then
       node.children_fetched = true
       local calls = util.await(fetch(node, direction))
-      local seen = {}
-      for _, c in ipairs(calls) do
-        local sym_id = M.node_id(c.item)
-        if not seen[sym_id] then
-          seen[sym_id] = true
-          node.has_children = true
-          if is_ancestor(graph, node, sym_id) then
-            -- Back-edge: close the cycle as a terminal leaf under `node`.
-            local cyc_key = node.id .. '\0#cycle\0' .. sym_id
-            if not graph.nodes[cyc_key] then
-              local cyc = new_node(graph, c.item, node.depth + 1, node.id)
-              cyc.id = cyc_key
-              cyc.is_cycle = true
-              cyc.cycle_of = node.id
-              cyc.children_fetched = true
-              cyc.has_children = false
-              graph.nodes[cyc_key] = cyc
-              add_edge(graph, node, cyc, c.call_site)
-            end
-          else
-            -- Tree mode: no dedup — each call path gets its own node.
-            local cid = node.id .. '\0' .. sym_id
-            if not graph.nodes[cid] then
-              local n = new_node(graph, c.item, node.depth + 1, node.id)
-              n.id = cid
-              graph.nodes[cid] = n
-              add_edge(graph, node, n, c.call_site)
-              if n.depth <= max_depth then queue[#queue + 1] = n end
-            end
-          end
-        end
+      local added = add_children(graph, node, calls)
+      for _, n in ipairs(added) do
+        if n.depth <= max_depth then queue[#queue + 1] = n end
       end
     end
   end
@@ -217,36 +235,57 @@ function M.expand_sync(graph, node, fetch)
     if c and not c.is_cycle and not c.children_fetched then
       c.children_fetched = true
       local calls = util.await(fetch(c, graph.direction))
-      local seen = {}
-      for _, cc in ipairs(calls) do
-        local sym_id = M.node_id(cc.item)
-        if not seen[sym_id] then
-          seen[sym_id] = true
-          c.has_children = true
-          if is_ancestor(graph, c, sym_id) then
-            local cyc_key = c.id .. '\0#cycle\0' .. sym_id
-            if not graph.nodes[cyc_key] then
-              local cyc = new_node(graph, cc.item, c.depth + 1, c.id)
-              cyc.id = cyc_key
-              cyc.is_cycle = true
-              cyc.cycle_of = c.id
-              cyc.children_fetched = true
-              cyc.has_children = false
-              graph.nodes[cyc_key] = cyc
-              add_edge(graph, c, cyc, cc.call_site)
-            end
-          else
-            -- Tree mode: no dedup — each call path gets its own node.
-            local ccid = c.id .. '\0' .. sym_id
-            if not graph.nodes[ccid] then
-              local n = new_node(graph, cc.item, c.depth + 1, c.id)
-              n.id = ccid
-              n.visible = false -- one level per expand
-              graph.nodes[ccid] = n
-              add_edge(graph, c, n, cc.call_site)
-            end
-          end
-        end
+      local added = add_children(graph, c, calls)
+      for _, n in ipairs(added) do n.visible = false end -- one level per expand
+    end
+  end
+
+  recompute_max_visible(graph)
+  return graph
+end
+
+--- Async wrapper for rebuild_node (its fetch may await async providers).
+function M.rebuild(graph, node, fetch)
+  local d = util.Deferred.new()
+  util.async_start(function()
+    local ok, res = pcall(M.rebuild_node, graph, node, fetch)
+    if ok then d:resolve(res) else d:reject(res) end
+  end)
+  return d
+end
+
+--- Rebuild `node`'s subtree with a (possibly filtered) fetch: drop its old
+--- children and re-query from `node` down to max_depth. Used after the user
+--- picks a definition so the expansion reflects that definition's call sites
+--- (the view injects a fetch that keeps only calls in the chosen file).
+function M.rebuild_node(graph, node, fetch)
+  local function drop(n)
+    for _, cid in ipairs(n.children) do
+      local c = graph.nodes[cid]
+      if c then drop(c) end
+    end
+    graph.nodes[n.id] = nil
+  end
+  for _, cid in ipairs(node.children) do
+    local c = graph.nodes[cid]
+    if c then drop(c) end
+  end
+  node.children = {}
+  node.children_fetched = false
+  node.has_children = false
+
+  -- BFS rebuild like build_sync.
+  local queue = { node }
+  local head = 1
+  while head <= #queue do
+    local n = queue[head]
+    head = head + 1
+    if not n.is_cycle and n.depth <= graph.max_depth then
+      n.children_fetched = true
+      local calls = util.await(fetch(n, graph.direction))
+      local added = add_children(graph, n, calls)
+      for _, c in ipairs(added) do
+        if c.depth <= graph.max_depth then queue[#queue + 1] = c end
       end
     end
   end
