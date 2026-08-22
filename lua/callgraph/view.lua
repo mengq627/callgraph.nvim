@@ -379,6 +379,28 @@ function M.change_depth(delta)
   M.rebuild()
 end
 
+--- Grow/shrink the view window: width for `right` layout, height for `bottom`.
+--- The adjusted size is written back to config so later renders and re-opens
+--- keep it.
+function M.resize_window_size(delta)
+  if not state or not state.win or not vim.api.nvim_win_is_valid(state.win) then return end
+  local opts = config.get()
+  local pos = opts.window.position
+  local step = (pos == 'right') and 5 or 2
+  if pos == 'right' then
+    local w = vim.api.nvim_win_get_width(state.win) + delta * step
+    local max = math.floor(vim.o.columns * (opts.window.max_width_ratio or 0.8))
+    w = math.max(3, math.min(w, max))
+    config.update({ window = { fixed_width = w } })
+  else
+    local h = vim.api.nvim_win_get_height(state.win) + delta * step
+    local max = math.max(3, vim.o.lines - 1) -- keep at least one row for the editor
+    h = math.max(3, math.min(h, max))
+    config.update({ window = { fixed_height = h } })
+  end
+  M.resize_window(config.get())
+end
+
 --- Switch to the other direction for the current root (a different tab).
 function M.set_direction(dir)
   local tab = active_tab()
@@ -504,6 +526,7 @@ function M.show_help()
     '  r                   refresh',
     '  i / o               callin / callout',
     '  + / = -            depth +1 / -1',
+    '  > / <               grow / shrink view window',
     '  click / dbl-click   select / expand (mouse)',
     '  Tab / Shift-Tab     switch tab',
   }, '\n'), vim.log.levels.INFO, { title = 'Callgraph' })
@@ -539,6 +562,8 @@ function M.setup_keymaps()
   set(km.depth_up, function() M.change_depth(1) end)
   set(km.depth_up_alt, function() M.change_depth(1) end)
   set(km.depth_down, function() M.change_depth(-1) end)
+  set(km.win_grow, function() M.resize_window_size(1) end)
+  set(km.win_shrink, function() M.resize_window_size(-1) end)
   set(km.jump_to_def, function() M.jump_to_def() end)
   set(km.jump_to_def_alt, function() M.jump_to_def() end)
   -- Tab keys switch between callgraph tabs. These buffer-local bindings

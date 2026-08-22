@@ -97,6 +97,8 @@ M.defaults = {
     depth_up = '+',
     depth_up_alt = '=', -- `=` equals `+` (no shift needed)
     depth_down = '-',
+    win_grow = '>',   -- grow the view window (width for right, height for bottom)
+    win_shrink = '<', -- shrink it
     jump_to_def = '<CR>', -- jump to the definition in the main window
     jump_to_def_alt = 'd',
     tab_next = '<Tab>', -- next tab (overrides global mappings like barbar)
