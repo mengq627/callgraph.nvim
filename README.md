@@ -206,16 +206,26 @@ nvim --headless -u NONE -l tests/e2e_callout.lua         # end-to-end: open file
 ### Interactive E2E (watch it run)
 
 Runs cases in a real Neovim window, stepping through each action with on-screen
-prompts and pauses so you can judge every step:
+prompts and pauses so you can judge every step. Drive the whole suite with a
+single command:
 
 ```bash
+# watch all cases — callout, callin, direction, expand, depth, tabs, jump,
+# close, cycle, scroll, help (one command steps through every capability)
 nvim -u NONE --cmd "set rtp+=<repo>" tests/test_complex.c \
-  -c "lua dofile('<repo>/tests/e2e_cases.lua').run('callout')"
+  -c "lua dofile('<repo>/tests/e2e_cases.lua').run_all()"
+
+# or watch a single case
+nvim -u NONE --cmd "set rtp+=<repo>" tests/test_complex.c \
+  -c "lua dofile('<repo>/tests/e2e_cases.lua').run('tabs')"
 ```
 
 Cases live in `tests/e2e_cases.lua` (a list of `{ msg, fn, wait_ms, check }`
 steps); add more to guard other features. Headless (CI) runs the same cases
-synchronously and asserts each step.
+synchronously and asserts each step:
+
+```bash
+nvim --headless -u NONE -c "lua dofile('<repo>/tests/e2e_cases.lua').run_all()"
 ```
 
 `tests/smoke.lua` covers: tree expansion (a symbol appears once per call path), cycle terminals, callin mirror,

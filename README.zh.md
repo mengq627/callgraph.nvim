@@ -203,15 +203,24 @@ nvim --headless -u NONE -l tests/e2e_callout.lua         # 端到端：打开文
 ### 交互式 E2E（观看运行）
 
 在真实 nvim 窗口中运行用例，逐步执行每个动作并带屏幕提示与停留，便于
-逐条判断效果：
+逐条判断效果。一条命令跑完全部用例：
 
 ```bash
+# 观看全部用例——callout / callin / direction / expand / depth / tabs /
+# jump / close / cycle / scroll / help（一个命令驱动所有插件能力）
 nvim -u NONE --cmd "set rtp+=<仓库>" tests/test_complex.c \
-  -c "lua dofile('<仓库>/tests/e2e_cases.lua').run('callout')"
+  -c "lua dofile('<仓库>/tests/e2e_cases.lua').run_all()"
+
+# 或只观看单个用例
+nvim -u NONE --cmd "set rtp+=<仓库>" tests/test_complex.c \
+  -c "lua dofile('<仓库>/tests/e2e_cases.lua').run('tabs')"
 ```
 
 用例定义在 `tests/e2e_cases.lua`（一组 `{ msg, fn, wait_ms, check }` 步骤）；
-可继续添加用例看护其他功能。headless（CI）会同步跑同一批用例并断言每步。
+可继续添加用例看护其他功能。headless（CI）会同步跑同一批用例并断言每步：
+
+```bash
+nvim --headless -u NONE -c "lua dofile('<仓库>/tests/e2e_cases.lua').run_all()"
 ```
 
 `tests/smoke.lua` 覆盖：树形展开（同一符号按路径各出现一次）、循环终止节点、callin 镜像、
