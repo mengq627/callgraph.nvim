@@ -431,6 +431,30 @@ function M.jump_to_def()
   if orig and vim.api.nvim_win_is_valid(orig) then
     vim.api.nvim_set_current_win(orig)
   end
+  -- cscope nodes carry the *call-site* location in uri/range (cscope -L output
+  -- is call sites, not definitions). Detect this: when the node's uri/line
+  -- matches its call_site, the uri/range point at the caller, not the def — so
+  -- lazily look up the real definition via `cscope -1` and jump there.
+  local cscope = source_mod.provider('cscope')
+  local is_cscope_node = cscope
+    and node.call_site
+    and node.uri == node.call_site.uri
+    and node.range
+    and node.range.start
+    and node.range.start.line == node.call_site.line
+  if is_cscope_node then
+    cscope.find_definition(node.name):next(function(def)
+      if def then
+        lsp_mod.jump_to_location(def.uri,
+          { start = { line = def.line, character = 0 }, ['end'] = { line = def.line, character = 0 } },
+          state.encoding)
+      elseif node.range then
+        -- Fallback: jump to the call site if definition lookup fails.
+        lsp_mod.jump_to_location(node.uri, node.range, state.encoding)
+      end
+    end)
+    return
+  end
   if node.range then
     lsp_mod.jump_to_location(node.uri, node.range, state.encoding)
   end
