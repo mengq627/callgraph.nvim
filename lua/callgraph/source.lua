@@ -95,6 +95,9 @@ end
 --- Clear the session-level query cache (e.g. after external index changes).
 function M.clear_cache()
   fetch_cache = {}
+  for _, p in pairs(providers) do
+    if p.clear_cache then p.clear_cache() end
+  end
 end
 
 --- Resolve the "current function" root. Currently delegates to the LSP adapter
