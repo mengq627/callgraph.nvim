@@ -119,10 +119,12 @@ end
 function M.resolve_root(bufnr)
   bufnr = bufnr or vim.api.nvim_get_current_buf()
   local client = find_client(bufnr, 'textDocument/prepareCallHierarchy')
+  -- luacov: disable (defensive: no server attached)
   if not client then
-    vim.notify('Callgraph: no language server with call hierarchy support (for C, use clangd)', vim.log.levels.WARN)
+    vim.notify('Callgraph: no language server with call hierarchy support for this file type — install/enable an LSP for it', vim.log.levels.WARN)
     return nil, nil, nil
   end
+  -- luacov: enable
   local encoding = client.offset_encoding or 'utf-16'
   local win = vim.fn.bufwinid(bufnr)
   if win < 0 then win = 0 end

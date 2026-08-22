@@ -69,6 +69,28 @@ Mouse: single click selects a box, **double-click** expands/collapses, scroll wh
 > Tip: use clangd ≥ 20 so both callin and callout use standard semantic analysis (cross-file, precise).
 > With clangd < 20, callout automatically falls through to the next source (e.g. `auto`).
 
+## Supported languages
+
+The plugin is **language-agnostic** — call-graph data comes from the LSP
+[Call Hierarchy](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_prepareCallHierarchy)
+protocol and nothing scans C syntax specifically. Install an LSP for your file
+type and the plugin uses it automatically.
+
+What actually matters is which call-hierarchy methods the server implements:
+
+| LSP method | Plugin uses it for | Known implementations |
+|---|---|---|
+| `prepareCallHierarchy` | resolving the root function under the cursor | most servers (LSP 3.16+) |
+| `callHierarchy/incomingCalls` | callin — who calls this | clangd ≥ LLVM 12, pyright ≥ 1.1.44, … |
+| `callHierarchy/outgoingCalls` | callout — what this calls | clangd ≥ LLVM 20, pyright ≥ 1.1.44, … |
+
+If the server lacks a method, that fetch resolves empty and the plugin falls
+through to the next configured source. Note the `auto` fallback scans C-like
+`name(` call tokens and `cscope` is C/C++ only — so for a non-C language use a
+server that implements **both** directions for full callout + callin. A server
+without call hierarchy at all shows a message telling you to install/enable an
+LSP for the file type.
+
 ## Requirements
 
 - Neovim **≥ 0.10**
@@ -202,6 +224,7 @@ nvim --headless -u NONE -l tests/ui.lua                # no server: split view /
 nvim --headless -u NONE -l tests/integration.lua       # real clangd: clean.c callout(fallback) + callin
 nvim --headless -u NONE -l tests/integration_testc.lua # real clangd: test.c name-match fallback
 nvim --headless -u NONE -l tests/integration_lsp.lua   # clangd ≥ 20: pure-LSP callout 4 levels + callin
+nvim --headless -u NONE -l tests/integration_py.lua    # pyright: Python callout(outgoing)+callin (skips if absent)
 nvim --headless -u NONE -l tests/cscope.lua            # cscope provider: output parse / index discovery / availability
 nvim --headless -u NONE -l tests/integration_complex.lua # test_complex.c: diamond / cycles / fan-out / deep chain
 nvim --headless -u NONE -l tests/e2e_callout.lua         # end-to-end: open file, place cursor, run :Callout (CI)

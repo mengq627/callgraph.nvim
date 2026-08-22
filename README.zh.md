@@ -69,6 +69,26 @@
 > 建议：使用 clangd ≥ 20，这样 callin / callout 都走标准语义分析（跨文件、精确）。
 > clangd < 20 时 callout 会从 lsp 自动降到下一个来源（如 `auto`）。
 
+## 支持的语言
+
+插件**语言无关**——调用图数据来自 LSP
+[Call Hierarchy](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_prepareCallHierarchy)
+协议，插件本身不做任何 C 专属的语法扫描。为你的文件类型安装对应的 LSP
+（clangd / pyright / gopls / …），插件会自动使用。
+
+真正决定能力的是服务器实现了哪些 call hierarchy 方法：
+
+| LSP 方法 | 插件用途 | 已知实现 |
+|---|---|---|
+| `prepareCallHierarchy` | 解析光标处的根函数 | 多数服务器（LSP 3.16+） |
+| `callHierarchy/incomingCalls` | callin——谁调用了它 | clangd ≥ LLVM 12、pyright ≥ 1.1.44 等 |
+| `callHierarchy/outgoingCalls` | callout——它调用了谁 | clangd ≥ LLVM 20、pyright ≥ 1.1.44 等 |
+
+若服务器缺少某个方法，该次查询返回空并自动降级到下一个配置的来源。注意 `auto`
+兜底的 callout 扫描的是类 C 的 `name(` 调用 token，`cscope` 仅 C/C++——所以非 C
+语言请选用**同时实现两个方向**的服务器以获得完整的 callout + callin。若服务器
+完全不支持 call hierarchy，插件会提示你为当前文件类型安装/启用对应 LSP。
+
 ## 要求
 
 - Neovim **≥ 0.10**
@@ -199,6 +219,7 @@ nvim --headless -u NONE -l tests/ui.lua                # 无服务器：分割�
 nvim --headless -u NONE -l tests/integration.lua       # 真 clangd：clean.c 的 callout(fallback)+callin
 nvim --headless -u NONE -l tests/integration_testc.lua # 真 clangd：test.c 先调用后声明的 name-match 兜底
 nvim --headless -u NONE -l tests/integration_lsp.lua   # clangd ≥ 20：纯 LSP callout 4 层 + callin
+nvim --headless -u NONE -l tests/integration_py.lua    # pyright：Python callout(outgoing) + callin（无 pyright 则跳过）
 nvim --headless -u NONE -l tests/cscope.lua            # cscope provider：输出解析 / 索引发现 / 可用性探测
 nvim --headless -u NONE -l tests/integration_complex.lua # test_complex.c：菱形 / 循环 / fan-out / 深链
 nvim --headless -u NONE -l tests/e2e_callout.lua         # 端到端：打开文件、定位光标、执行 :Callout（CI）
